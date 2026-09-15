@@ -15,14 +15,20 @@ cp "$OUT/base.apk" "$OUT/unsigned.apk"
 (cd "$OUT/dex" && zip -q "$OUT/unsigned.apk" classes.dex)
 "$BT/zipalign" -f -p 4 "$OUT/unsigned.apk" "$OUT/aligned.apk"
 # Production signing is supplied separately; private keys never enter git.
-if [[ -n "${FOREST_KEYSTORE_B64:-}" ]]; then
+KEYSTORE=""
+if [[ -n "${FOREST_KEYSTORE_PATH:-}" ]]; then
+ KEYSTORE="$FOREST_KEYSTORE_PATH"
+elif [[ -n "${FOREST_KEYSTORE_B64:-}" ]]; then
  printf '%s' "$FOREST_KEYSTORE_B64" | base64 -d > "$OUT/signing.p12"
  chmod 600 "$OUT/signing.p12"
+ KEYSTORE="$OUT/signing.p12"
+fi
+if [[ -n "$KEYSTORE" ]]; then
  export FOREST_KEYSTORE_PASSWORD="${FOREST_KEYSTORE_PASSWORD:-}"
- "$BT/apksigner" sign --ks "$OUT/signing.p12" --ks-pass env:FOREST_KEYSTORE_PASSWORD --out "$OUT/FOREST-9.0.0.apk" "$OUT/aligned.apk"
- "$BT/apksigner" verify --verbose --print-certs "$OUT/FOREST-9.0.0.apk"
- rm "$OUT/signing.p12"
+ "$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass env:FOREST_KEYSTORE_PASSWORD --out "$OUT/FOREST-9.1.0.apk" "$OUT/aligned.apk"
+ "$BT/apksigner" verify --verbose --print-certs "$OUT/FOREST-9.1.0.apk"
+ [[ "$KEYSTORE" != "$OUT/signing.p12" ]] || rm "$KEYSTORE"
 else
- cp "$OUT/aligned.apk" "$OUT/FOREST-9.0.0-unsigned.apk"
+ cp "$OUT/aligned.apk" "$OUT/FOREST-9.1.0-unsigned.apk"
 fi
 "$BT/aapt2" dump badging "$OUT/base.apk"
