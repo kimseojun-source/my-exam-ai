@@ -1,18 +1,43 @@
 
-import os, json, re, sqlite3, tempfile, math, hashlib, base64
+import os, json, re, sqlite3, tempfile, math, hashlib, base64, secrets
 from pathlib import Path
 from datetime import date, datetime, timedelta
 from collections import Counter
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 from pypdf import PdfReader
 
 BASE=Path(__file__).parent
-DATA=BASE/"data"
-DATA.mkdir(exist_ok=True)
-DB=DATA/"exam_ai.db"
-app=FastAPI(title="My Exam AI Complete",version="5.0")
+DATA_ROOT=Path(os.getenv("DATA_ROOT", str(BASE/"data_store"))).resolve()
+DATA_ROOT.mkdir(parents=True,exist_ok=True)
+DATA=DATA_ROOT/"uploads"
+DATA.mkdir(parents=True,exist_ok=True)
+DB=DATA_ROOT/"exam_ai.db"
+
+def get_session_secret():
+    configured=os.getenv("SESSION_SECRET","").strip()
+    if configured:
+        return configured
+    # Persist an automatically generated secret with the app data so sessions
+    # remain valid across restarts when a Railway Volume is mounted.
+    secret_file=DATA_ROOT/".session_secret"
+    if secret_file.exists():
+        value=secret_file.read_text(encoding="utf-8").strip()
+        if value:
+            return value
+    value=secrets.token_urlsafe(48)
+    secret_file.write_text(value,encoding="utf-8")
+    try:
+        os.chmod(secret_file,0o600)
+    except Exception:
+        pass
+    return value
+
+SESSION_SECRET=get_session_secret()
+IS_HTTPS=os.getenv("COOKIE_HTTPS_ONLY", "1" if os.getenv("RAILWAY_PROJECT_ID") else "0")=="1"
+app=FastAPI(title="My Exam AI Website",version="6.2")
 
 def nowiso(): return datetime.now().isoformat(timespec="seconds")
 
@@ -21,15 +46,38 @@ def nowiso(): return datetime.now().isoformat(timespec="seconds")
 async def access_guard(request:Request,call_next):
     required=os.getenv("APP_ACCESS_CODE","").strip()
     if required and request.url.path.startswith("/api/"):
+        # Login/profile discovery still uses the shared site code.
         if request.headers.get("x-app-code","") != required:
             return JSONResponse({"detail":"앱 접속코드가 필요해."},status_code=401)
+
+    # Strong profile isolation for the public website:
+    # a verified profile session may only call /api/p/<its-own-id>/...
+    m=re.match(r"^/api/p/(\d+)(?:/|$)",request.url.path)
+    if m:
+        active=request.session.get("profile_id")
+        if active is None or int(active)!=int(m.group(1)):
+            return JSONResponse({"detail":"현재 로그인한 사용자 공간이 아니야."},status_code=403)
     return await call_next(request)
+
+# SessionMiddleware must wrap the custom access middleware so request.session
+# is available inside access_guard.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    session_cookie="exam_ai_session",
+    max_age=60*60*24*30,
+    same_site="lax",
+    https_only=IS_HTTPS,
+)
 
 # ---------- database ----------
 def db():
-    con=sqlite3.connect(DB)
+    con=sqlite3.connect(DB,timeout=30)
     con.row_factory=sqlite3.Row
     con.execute("PRAGMA foreign_keys=ON")
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA synchronous=NORMAL")
+    con.execute("PRAGMA busy_timeout=30000")
     con.executescript("""
     CREATE TABLE IF NOT EXISTS profiles(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -370,17 +418,50 @@ def list_profiles():
     return [{"id":r["id"],"name":r["name"],"is_owner":bool(r["is_owner"]),"has_pin":bool(r["pin_hash"])} for r in rows]
 
 @app.post("/api/profiles")
-def add_profile(name:str=Form(...),pin:str=Form("")):
+def add_profile(request:Request,name:str=Form(...),pin:str=Form("")):
+    active=request.session.get("profile_id")
+    if active is None:
+        raise HTTPException(403,"소유자 프로필로 먼저 로그인해줘.")
+    owner=profile_row(int(active))
+    if not owner["is_owner"]:
+        raise HTTPException(403,"소유자만 두 번째 사용자를 만들 수 있어.")
     con=db();n=con.execute("SELECT COUNT(*) n FROM profiles").fetchone()["n"]
-    if n>=2:con.close();raise HTTPException(400,"이 버전은 한 계정에서 사용자 2명까지 쓰도록 설정했어.")
+    if n>=2:con.close();raise HTTPException(400,"현재 사이트는 사용자 2명까지 쓰도록 설정했어.")
+    if len(pin)<4:
+        con.close();raise HTTPException(400,"두 번째 사용자는 4자리 이상의 PIN을 설정해줘.")
     cur=con.execute("INSERT INTO profiles(name,is_owner,pin_hash,created_at) VALUES(?,?,?,?)",(name.strip() or "사용자 2",0,hash_pin(pin),nowiso()))
     con.commit();pid=cur.lastrowid;con.close();return {"id":pid}
 
 @app.post("/api/profiles/{pid}/verify")
-def verify(pid:int,pin:str=Form("")):
+def verify(request:Request,pid:int,pin:str=Form("")):
     p=profile_row(pid)
     if p["pin_hash"] and hash_pin(pin)!=p["pin_hash"]:raise HTTPException(403,"PIN이 맞지 않아.")
+    request.session.clear()
+    request.session["profile_id"]=int(pid)
+    request.session["profile_name"]=p["name"]
+    request.session["is_owner"]=bool(p["is_owner"])
     return {"ok":True,"profile":{"id":p["id"],"name":p["name"],"is_owner":bool(p["is_owner"])}}
+
+@app.post("/api/logout")
+def logout(request:Request):
+    request.session.clear()
+    return {"ok":True}
+
+@app.get("/api/session")
+def get_session(request:Request):
+    pid=request.session.get("profile_id")
+    if pid is None:return {"logged_in":False}
+    p=profile_row(int(pid))
+    return {"logged_in":True,"profile":{"id":p["id"],"name":p["name"],"is_owner":bool(p["is_owner"])}}
+
+@app.post("/api/profiles/{pid}/pin")
+def set_profile_pin(request:Request,pid:int,pin:str=Form("")):
+    if request.session.get("profile_id")!=pid:
+        raise HTTPException(403,"현재 사용자만 자기 PIN을 바꿀 수 있어.")
+    if len(pin)<4:
+        raise HTTPException(400,"PIN은 4자리 이상으로 설정해줘.")
+    con=db();con.execute("UPDATE profiles SET pin_hash=? WHERE id=?",(hash_pin(pin),pid));con.commit();con.close()
+    return {"ok":True}
 
 # ---------- courses ----------
 @app.get("/api/p/{pid}/courses")
@@ -618,6 +699,170 @@ def backup(pid:int):
         data["tutor_messages"] += [dict(x) for x in con.execute("SELECT * FROM tutor_messages WHERE course_id=?",(cid,)).fetchall()]
     con.close()
     return JSONResponse(data,headers={"Content-Disposition":f'attachment; filename="exam_ai_profile_{pid}_backup.json"'})
+
+@app.get("/health")
+def health():
+    return {"ok":True,"version":"6.2","ai_configured":bool(os.getenv("OPENAI_API_KEY","")),"storage":str(DATA_ROOT)}
+
+@app.get("/api/runtime")
+def runtime():
+    domain=os.getenv("RAILWAY_PUBLIC_DOMAIN","")
+    return {
+      "public_url":f"https://{domain}" if domain else "",
+      "hosting":"railway" if os.getenv("RAILWAY_PROJECT_ID") else "local"
+    }
+
+
+# ---------- exam-core click detail ----------
+CORE_DETAIL_LABELS={
+    "must_memorize":"무조건 암기",
+    "must_understand":"이해 필수",
+    "exam_hotspots":"출제 핫스팟",
+    "confusing_pairs":"헷갈리는 비교",
+    "formula_or_frameworks":"공식·프레임워크",
+}
+
+@app.post("/api/p/{pid}/courses/{cid}/core-detail")
+async def core_detail(pid:int,cid:int,payload:dict):
+    c=course_row(pid,cid)
+    category=str(payload.get("category") or "")
+    if category not in CORE_DETAIL_LABELS:
+        raise HTTPException(400,"상세설명할 시험핵심 유형을 찾지 못했어.")
+    try:index=int(payload.get("index",-1))
+    except:index=-1
+    analysis=json.loads(c["analysis_json"] or "{}")
+    items=analysis.get(category) or []
+    if index<0 or index>=len(items):
+        raise HTTPException(404,"해당 시험핵심 항목을 찾지 못했어.")
+    item=items[index]
+    topic=str(item.get("text") or "").strip()
+    if not topic:
+        raise HTTPException(400,"설명할 내용이 비어 있어.")
+
+    docs=course_docs(pid,cid,["lecture","textbook","notes"])
+    if not docs:docs=course_docs(pid,cid)
+    related=retrieve(chunks_from_docs(docs),topic,k=12)
+    context="\n\n".join(f"[{x['doc']} p.{x['page']}]\n{x['text']}" for x in related)
+    prompt=f"""너는 대학 시험 대비 설명 튜터다.
+현재 과목: {c['name']}
+시험핵심 분류: {CORE_DETAIL_LABELS[category]}
+사용자가 누른 핵심 항목: {topic}
+
+반드시 아래 현재 과목 강의자료/교재/필기 근거 안에서만 상세설명한다.
+자료에 없는 사실을 일반지식으로 임의 보충하지 않는다.
+강의자료의 용어와 표현을 우선한다.
+
+다음 순서로 한국어로 설명해라.
+1. 핵심 뜻: 처음 보는 학생도 이해하게 3~6문장
+2. 왜 시험에 중요한가: 이 자료 안에서 중요한 이유
+3. 시험 직전 기억할 포인트: 3~5개
+4. 나올 수 있는 질문 형태: 자료가 뒷받침하는 범위에서만 1~3개
+5. 근거: 사용한 문서명과 페이지
+
+관련 현재 과목 자료:
+{context[:70000]}"""
+    answer=text_call(prompt,web=False)
+    if answer is None:
+        answer=topic+"\n\nAI API를 사용할 수 없어 현재 자료의 관련 근거만 보여줄게.\n"+"\n".join(
+            f"- {x['doc']} p.{x['page']}: {x['text'][:260]}" for x in related[:5]
+        )
+    seen=set();sources=[]
+    for x in related:
+        key=(x["doc"],x["page"])
+        if key in seen:continue
+        seen.add(key);sources.append({"doc":x["doc"],"page":x["page"]})
+        if len(sources)>=6:break
+    return {"title":topic,"category":CORE_DETAIL_LABELS[category],"answer":answer,"sources":sources}
+
+DETAIL_JS=r"""
+(function(){
+  const CATEGORY_BY_TITLE={
+    "무조건 암기":"must_memorize","이해 필수":"must_understand","출제 핫스팟":"exam_hotspots",
+    "헷갈리는 비교":"confusing_pairs","공식·프레임워크":"formula_or_frameworks"
+  };
+  const safe=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+  const nl=s=>safe(s).replace(/\n/g,"<br>");
+  let modal=null;
+  function ensureModal(){
+    if(modal)return modal;
+    const style=document.createElement("style");
+    style.textContent=`
+    #coreDetailModal{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.55);display:flex;align-items:flex-end;justify-content:center;padding:12px}
+    #coreDetailModal.hidden{display:none!important}.core-detail-sheet{width:min(760px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:24px 24px 18px 18px;padding:20px;box-shadow:0 24px 80px rgba(15,23,42,.28)}
+    .core-detail-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;position:sticky;top:-20px;background:#fff;padding:4px 0 12px;z-index:2}
+    .core-detail-close{flex:0 0 auto;background:#f1f5f9;color:#0f172a;width:38px;height:38px;padding:0;border-radius:50%;font-size:20px}
+    .core-detail-answer{line-height:1.75;font-size:15px}.core-detail-sources{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+    .core-detail-source{background:#eef2ff;color:#3730a3;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:800}
+    #sumBody .core-detail-item{cursor:pointer;border-radius:14px;padding:13px 10px;transition:.15s;background:linear-gradient(90deg,#fff,#fbfcff)}
+    #sumBody .core-detail-item:hover{background:#f8fafc}#sumBody .core-detail-item:active{transform:scale(.995)}
+    .core-detail-hint{font-size:10px;color:#6366f1;font-weight:850;margin-top:5px}.core-detail-loading{padding:28px 0;text-align:center;color:#64748b}
+    @media(min-width:700px){#coreDetailModal{align-items:center}.core-detail-sheet{border-radius:24px}}`;
+    document.head.appendChild(style);
+    modal=document.createElement("div");modal.id="coreDetailModal";modal.className="hidden";
+    modal.innerHTML=`<div class="core-detail-sheet" role="dialog" aria-modal="true">
+      <div class="core-detail-head"><div><div class="mini" id="coreDetailCategory">시험 핵심 상세설명</div><h2 id="coreDetailTitle" style="margin-top:4px"></h2></div><button class="core-detail-close" aria-label="닫기">×</button></div>
+      <div id="coreDetailBody" class="core-detail-answer"></div><div id="coreDetailSources" class="core-detail-sources"></div></div>`;
+    document.body.appendChild(modal);
+    modal.querySelector(".core-detail-close").onclick=()=>modal.classList.add("hidden");
+    modal.addEventListener("click",e=>{if(e.target===modal)modal.classList.add("hidden")});
+    return modal;
+  }
+  async function openDetail(category,index){
+    const m=ensureModal(),item=(typeof A!=="undefined"&&A&&A[category])?A[category][index]:null;
+    document.querySelector("#coreDetailCategory").textContent="시험 핵심 상세설명";
+    document.querySelector("#coreDetailTitle").textContent=item?.text||"상세설명";
+    document.querySelector("#coreDetailBody").innerHTML=`<div class="core-detail-loading">강의자료에서 근거를 찾아 상세설명 만드는 중…</div>`;
+    document.querySelector("#coreDetailSources").innerHTML="";m.classList.remove("hidden");
+    try{
+      const x=await jf(`/api/p/${PID}/courses/${CID}/core-detail`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({category,index})});
+      document.querySelector("#coreDetailCategory").textContent=x.category||"시험 핵심";
+      document.querySelector("#coreDetailTitle").textContent=x.title||item?.text||"상세설명";
+      document.querySelector("#coreDetailBody").innerHTML=nl(x.answer||"설명이 없어.");
+      document.querySelector("#coreDetailSources").innerHTML=(x.sources||[]).map(s=>`<span class="core-detail-source">${safe(s.doc)}${s.page?` · p.${s.page}`:""}</span>`).join("");
+    }catch(e){document.querySelector("#coreDetailBody").innerHTML=`<div class="notice">상세설명을 불러오지 못했어: ${safe(e.message||e)}</div>`}
+  }
+  function enhance(){
+    const root=document.querySelector("#sumBody");if(!root)return;
+    let category=null;const counters={};
+    [...root.children].forEach(el=>{
+      if(el.tagName==="H3"){category=CATEGORY_BY_TITLE[(el.textContent||"").trim()]||null;if(category&&counters[category]==null)counters[category]=0;return}
+      if(!category||!el.classList.contains("item"))return;
+      const cat=category,idx=counters[cat]++;
+      if(el.dataset.coreDetailBound==="1")return;
+      el.dataset.coreDetailBound="1";el.classList.add("core-detail-item");
+      const hint=document.createElement("div");hint.className="core-detail-hint";hint.textContent="눌러서 상세설명 보기 ›";el.appendChild(hint);
+      el.addEventListener("click",()=>openDetail(cat,idx));
+    });
+  }
+  window.addEventListener("keydown",e=>{if(e.key==="Escape"&&modal)modal.classList.add("hidden")});
+  function start(){ensureModal();const root=document.querySelector("#sumBody");if(root)new MutationObserver(enhance).observe(root,{childList:true,subtree:true});enhance();setInterval(enhance,1200)}
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start);else start();
+})();
+"""
+
+def install_core_detail_frontend():
+    static_dir=BASE/"static"
+    try:
+        static_dir.mkdir(parents=True,exist_ok=True)
+        (static_dir/"detail.js").write_text(DETAIL_JS,encoding="utf-8")
+        index_path=static_dir/"index.html"
+        if index_path.exists():
+            html=index_path.read_text(encoding="utf-8")
+            tag='<script src="/detail.js?v=4"></script>'
+            if tag not in html:
+                html=html.replace("</body>",tag+"</body>") if "</body>" in html else html+tag
+                index_path.write_text(html,encoding="utf-8")
+        # Force clients off the old cached shell.
+        (static_dir/"sw.js").write_text(
+            "self.addEventListener('install',e=>self.skipWaiting());\\n"
+            "self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.map(x=>caches.delete(x)))).then(()=>self.clients.claim())));\\n"
+            "self.addEventListener('fetch',e=>{if(e.request.mode==='navigate'){e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));}});\\n",
+            encoding="utf-8")
+    except Exception as e:
+        print("core detail frontend install failed",repr(e))
+
+install_core_detail_frontend()
+
 
 @app.get("/")
 def root():return FileResponse(BASE/"static"/"index.html")
