@@ -96,29 +96,7 @@ askTutor=async function(){
 function syncViewport(){document.documentElement.style.setProperty('--app-h',`${window.visualViewport?.height||innerHeight}px`);}
 window.addEventListener('resize',syncViewport,{passive:true});window.addEventListener('orientationchange',syncViewport,{passive:true});window.visualViewport?.addEventListener('resize',syncViewport,{passive:true});syncViewport();
 
-function setupInstallHelp(){
-  const ua=navigator.userAgent||'',isIOS=/iPad|iPhone|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-  const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-  if(!isIOS||standalone)return;
-  const dismissed=Number(localStorage.getItem('forest_install_dismissed')||0);
-  if(Date.now()-dismissed<3*24*60*60*1000)return;
-  const safari=/Safari/.test(ua)&&!/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
-  const banner=document.createElement('aside');banner.className='install-banner';banner.setAttribute('aria-label','FOR EST 홈 화면 설치 안내');
-  banner.innerHTML=`<img src="/icons/apple-touch-icon.png" alt=""><div class="install-banner-copy"><b>FOR'EST를 앱처럼 설치</b><span>${safari?'Safari 공유 버튼에서 바로 추가할 수 있어.':'Safari에서 열면 홈 화면에 추가할 수 있어.'}</span></div><button class="install-open">설치 방법</button><button class="install-close" aria-label="설치 안내 닫기">×</button>`;
-  document.body.appendChild(banner);
-  const close=()=>{banner.remove();localStorage.setItem('forest_install_dismissed',String(Date.now()));};
-  banner.querySelector('.install-close').addEventListener('click',close);
-  banner.querySelector('.install-open').addEventListener('click',()=>{
-    const modal=document.createElement('div');modal.className='install-sheet-backdrop';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','iPhone 및 iPad 설치 방법');
-    modal.innerHTML=`<section class="install-sheet"><div class="install-sheet-head"><img src="/icons/apple-touch-icon.png" alt="FOR'EST 아이콘"><div><h2>홈 화면에 FOR'EST 추가</h2><div class="sub">한 번 추가하면 일반 앱처럼 전체 화면으로 열려.</div></div></div>${safari?'<div class="install-steps"><div class="install-step"><div>Safari 아래쪽의 <b>공유</b> 버튼(□↑)을 눌러.</div></div><div class="install-step"><div><b>홈 화면에 추가</b>를 선택해.</div></div><div class="install-step"><div>이름이 FOR\'EST인지 보고 <b>추가</b>를 눌러.</div></div></div>':'<div class="install-steps"><div class="install-step"><div>오른쪽 아래 메뉴에서 <b>Safari에서 열기</b>를 선택해.</div></div><div class="install-step"><div>Safari의 <b>공유</b> 버튼(□↑)을 눌러.</div></div><div class="install-step"><div><b>홈 화면에 추가</b>를 선택해.</div></div></div>'}<div class="install-sheet-actions">${safari?'':'<button class="soft install-copy">주소 복사</button>'}<button class="primary install-done">확인</button></div></section>${safari?'<div class="install-share-arrow" aria-hidden="true">↓</div>':''}`;
-    document.body.appendChild(modal);
-    const done=()=>{modal.remove();banner.remove();localStorage.setItem('forest_install_dismissed',String(Date.now()));};
-    modal.querySelector('.install-done').addEventListener('click',done);
-    modal.addEventListener('click',e=>{if(e.target===modal)done();});
-    modal.querySelector('.install-copy')?.addEventListener('click',async e=>{try{await navigator.clipboard.writeText(location.href);e.currentTarget.textContent='주소 복사됨';}catch(_){prompt('주소를 복사해 Safari에서 열어줘',location.href);}});
-  });
-}
-setupInstallHelp();
+
 (async()=>{
   try{
     await loadProfiles();await restoreSession();
