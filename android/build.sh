@@ -8,7 +8,7 @@ OUT="${FOREST_BUILD_DIR:-$ROOT/build/android}"
 mkdir -p "$OUT/classes" "$OUT/dex"
 "$BT/aapt2" compile --dir "$ROOT/android/res" -o "$OUT/resources.zip"
 "$BT/aapt2" link -o "$OUT/base.apk" -I "$ANDROID_JAR" --manifest "$ROOT/android/AndroidManifest.xml" "$OUT/resources.zip" --min-sdk-version 26 --target-sdk-version 35
-javac -source 8 -target 8 -bootclasspath "$ANDROID_JAR" -d "$OUT/classes" "$ROOT/android/src/com/myexamai/app/MainActivity.java"
+javac -source 8 -target 8 -classpath "$ANDROID_JAR" -d "$OUT/classes" "$ROOT/android/src/com/myexamai/app/MainActivity.java"
 jar cf "$OUT/classes.jar" -C "$OUT/classes" .
 "$BT/d8" --lib "$ANDROID_JAR" --min-api 26 --output "$OUT/dex" "$OUT/classes.jar"
 cp "$OUT/base.apk" "$OUT/unsigned.apk"
