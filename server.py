@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import date, datetime, timedelta
 from collections import Counter
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from pypdf import PdfReader
@@ -145,6 +145,14 @@ def db():
       analysis_json TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(course_id) REFERENCES courses(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS document_annotations(
+      document_id INTEGER NOT NULL,
+      page INTEGER NOT NULL,
+      data_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY(document_id,page),
+      FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
     );
     """)
     # migrations for older builds
@@ -624,6 +632,85 @@ def owned_document(pid,cid,did):
 def download_document(pid:int,cid:int,did:int):
     row,path=owned_document(pid,cid,did)
     return FileResponse(path,filename=row["name"],media_type=mimetypes.guess_type(row["name"])[0] or "application/octet-stream",headers={"Cache-Control":"no-store"})
+
+def annotation_page(row,page):
+    try: page=int(page)
+    except (TypeError,ValueError): raise HTTPException(400,"페이지 번호가 올바르지 않아.")
+    if page<1 or page>max(1,int(row.get("pages") or 1)):
+        raise HTTPException(400,"자료에 없는 페이지야.")
+    return page
+
+def clean_annotation_items(items):
+    if not isinstance(items,list) or len(items)>1000:raise HTTPException(400,"필기 항목이 너무 많아.")
+    clean=[];point_count=0
+    color_re=re.compile(r"^#[0-9a-fA-F]{6}$")
+    def unit(v):
+        if isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v):raise HTTPException(400,"필기 좌표가 올바르지 않아.")
+        return round(min(1,max(0,float(v))),6)
+    for item in items:
+        if not isinstance(item,dict):raise HTTPException(400,"필기 형식이 올바르지 않아.")
+        color=item.get("color","#17231e")
+        if not isinstance(color,str) or not color_re.fullmatch(color):raise HTTPException(400,"필기 색상이 올바르지 않아.")
+        if item.get("type")=="stroke":
+            points=item.get("points")
+            if not isinstance(points,list) or len(points)<1:raise HTTPException(400,"펜 선에 좌표가 없어.")
+            point_count+=len(points)
+            if point_count>50000:raise HTTPException(400,"한 페이지의 펜 선이 너무 많아.")
+            width=item.get("width",4)
+            if isinstance(width,bool) or not isinstance(width,(int,float)) or not 1<=width<=30:raise HTTPException(400,"펜 굵기가 올바르지 않아.")
+            clean.append({"type":"stroke","color":color,"width":round(float(width),2),"points":[[unit(p[0]),unit(p[1])] for p in points if isinstance(p,list) and len(p)==2]})
+            if not clean[-1]["points"]:raise HTTPException(400,"펜 선 좌표가 올바르지 않아.")
+        elif item.get("type")=="text":
+            value=item.get("text","")
+            if not isinstance(value,str) or not value.strip() or len(value)>500:raise HTTPException(400,"텍스트는 1~500자로 입력해줘.")
+            size=item.get("size",24)
+            if isinstance(size,bool) or not isinstance(size,(int,float)) or not 10<=size<=72:raise HTTPException(400,"글자 크기가 올바르지 않아.")
+            clean.append({"type":"text","color":color,"size":round(float(size),2),"x":unit(item.get("x")),"y":unit(item.get("y")),"text":value.strip()})
+        else:raise HTTPException(400,"지원하지 않는 필기 형식이야.")
+    encoded=json.dumps(clean,ensure_ascii=False,separators=(",",":"))
+    if len(encoded.encode("utf-8"))>2*1024*1024:raise HTTPException(413,"한 페이지 필기는 2MB까지 저장할 수 있어.")
+    return clean,encoded
+
+@app.get("/api/p/{pid}/courses/{cid}/documents/{did}/preview")
+def preview_document(pid:int,cid:int,did:int,page:int=1):
+    row,path=owned_document(pid,cid,did);page=annotation_page(row,page)
+    try:
+        if path.suffix.lower()==".pdf":
+            import fitz
+            doc=fitz.open(path)
+            try:
+                if page>doc.page_count:raise HTTPException(400,"자료에 없는 페이지야.")
+                pdf_page=doc.load_page(page-1);rect=pdf_page.rect
+                scale=max(.5,min(2,2400/max(1,rect.width),2400/max(1,rect.height)))
+                pix=pdf_page.get_pixmap(matrix=fitz.Matrix(scale,scale),alpha=False)
+                content=pix.tobytes("png")
+            finally:doc.close()
+        else:
+            with Image.open(path) as source:
+                image=ImageOps.exif_transpose(source);image.thumbnail((2400,2400))
+                if image.mode not in ("RGB","RGBA"):image=image.convert("RGBA" if "transparency" in image.info else "RGB")
+                output=io.BytesIO();image.save(output,"PNG",optimize=True);content=output.getvalue()
+    except HTTPException:raise
+    except Exception:raise HTTPException(415,"이 자료는 화면 위 필기를 지원하지 않아.")
+    return Response(content,media_type="image/png",headers={"Cache-Control":"private, no-store"})
+
+@app.get("/api/p/{pid}/courses/{cid}/documents/{did}/annotations")
+def get_document_annotations(pid:int,cid:int,did:int,page:int=1):
+    row,_=owned_document(pid,cid,did);page=annotation_page(row,page)
+    con=db();saved=con.execute("SELECT data_json,updated_at FROM document_annotations WHERE document_id=? AND page=?",(did,page)).fetchone();con.close()
+    return {"page":page,"items":json.loads(saved["data_json"]) if saved else [],"updated_at":saved["updated_at"] if saved else None}
+
+@app.put("/api/p/{pid}/courses/{cid}/documents/{did}/annotations")
+async def save_document_annotations(pid:int,cid:int,did:int,request:Request,page:int=1):
+    row,_=owned_document(pid,cid,did);page=annotation_page(row,page)
+    try:payload=await request.json()
+    except Exception:raise HTTPException(400,"필기 데이터를 읽지 못했어.")
+    items,encoded=clean_annotation_items(payload.get("items") if isinstance(payload,dict) else None)
+    stamp=nowiso();con=db()
+    con.execute("""INSERT INTO document_annotations(document_id,page,data_json,updated_at) VALUES(?,?,?,?)
+      ON CONFLICT(document_id,page) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at""",(did,page,encoded,stamp))
+    con.commit();con.close()
+    return {"ok":True,"page":page,"count":len(items),"updated_at":stamp}
 
 @app.post("/api/p/{pid}/courses/{cid}/documents/{did}/reprocess")
 def reprocess_document(pid:int,cid:int,did:int):

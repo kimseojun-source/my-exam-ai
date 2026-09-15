@@ -38,7 +38,7 @@ render=function(){
   // Clear stale history even for a course without analysis; tutor works independently.
   $('#chat').innerHTML=(COURSE.tutor_history||[]).map(m=>`<div class="bubble ${m.role==='user'?'me':'ai'}">${esc(m.content)}</div>`).join('');
   renderPattern(COURSE.exam_pattern);originalRender();
-  $('#documentList').innerHTML=COURSE.documents.map(d=>`<div class="document"><b>${esc(d.name)}</b><div class="src">${d.pages}p · ${d.extraction==='pending_vision'?'원본 보관 · AI 읽기 대기':esc(d.extraction)}</div><div class="row"><button class="ghost" data-download="${d.id}">원본 받기</button><button class="soft" data-reprocess="${d.id}">다시 읽기</button></div></div>`).join('');
+  $('#documentList').innerHTML=COURSE.documents.map(d=>`<div class="document"><b>${esc(d.name)}</b><div class="src">${d.pages}p · ${d.extraction==='pending_vision'?'원본 보관 · AI 읽기 대기':esc(d.extraction)}</div><div class="row"><button class="primary" data-annotate="${d.id}" data-pages="${d.pages}" data-name="${esc(d.name)}">필기하기</button><button class="ghost" data-download="${d.id}">원본 받기</button><button class="soft" data-reprocess="${d.id}">다시 읽기</button></div></div>`).join('');
 };
 async function busy(button,action){
   if(button?.disabled)return;const text=button?.textContent;
@@ -48,11 +48,41 @@ async function busy(button,action){
 $('#documentList').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   const base=`/api/p/${PID}/courses/${CID}/documents/`;
+  if(b.dataset.annotate)return openAnnotator(+b.dataset.annotate,+b.dataset.pages,b.dataset.name);
   busy(b,async()=>{
     if(b.dataset.download)await downloadFile(base+b.dataset.download+'/file');
     else {await jf(base+b.dataset.reprocess+'/reprocess',{method:'POST'});await openCourse(CID);}
   });
 });
+
+let ANNO=null;
+function annotationMarkup(name){return `<div class="annotation-backdrop" role="dialog" aria-modal="true" aria-label="${esc(name)} 필기"><div class="annotation-sheet"><header><div><b>${esc(name)}</b><span id="annoPage"></span></div><button class="ghost" data-anno-close>닫기</button></header><div class="annotation-toolbar"><button class="active" data-anno-tool="pen">펜</button><button data-anno-tool="text">텍스트</button><label>색상 <input id="annoColor" type="color" value="#17231e"></label><label>크기 <input id="annoSize" type="range" min="1" max="30" value="4"></label><input id="annoText" class="hidden" maxlength="500" placeholder="텍스트 입력 후 자료를 눌러 배치"><button class="ghost" data-anno-undo>실행 취소</button><button class="ghost" data-anno-clear>페이지 지우기</button></div><main class="annotation-stage"><div class="annotation-paper"><img id="annoImage" alt="필기할 자료 페이지"><canvas id="annoCanvas"></canvas><div id="annoLoading">페이지 불러오는 중…</div></div></main><footer><button class="ghost" data-anno-prev>이전</button><span id="annoStatus" aria-live="polite">원본과 분리 저장돼</span><button class="ghost" data-anno-next>다음</button><button class="primary" data-anno-save>저장</button></footer></div></div>`;}
+async function openAnnotator(did,pages,name){
+  closeAnnotator();document.body.insertAdjacentHTML('beforeend',annotationMarkup(name));document.body.classList.add('annotating');
+  ANNO={did,pages:Math.max(1,pages||1),page:1,items:[],dirty:false,tool:'pen',drawing:null,pid:PID,cid:CID};
+  const root=document.querySelector('.annotation-backdrop'),canvas=$('#annoCanvas');
+  root.addEventListener('click',annotationClick);canvas.addEventListener('pointerdown',annotationDown);canvas.addEventListener('pointermove',annotationMove);canvas.addEventListener('pointerup',annotationUp);canvas.addEventListener('pointercancel',annotationUp);
+  $('#annoImage').addEventListener('load',()=>{resizeAnnotationCanvas();$('#annoLoading').classList.add('hidden');});
+  ANNO.observer=new ResizeObserver(resizeAnnotationCanvas);ANNO.observer.observe(root.querySelector('.annotation-paper'));
+  await loadAnnotationPage();
+}
+function closeAnnotator(){if(!ANNO)return;ANNO.observer?.disconnect();if(ANNO.imageUrl)URL.revokeObjectURL(ANNO.imageUrl);document.querySelector('.annotation-backdrop')?.remove();document.body.classList.remove('annotating');ANNO=null;}
+function annotationBase(){return `/api/p/${ANNO.pid}/courses/${ANNO.cid}/documents/${ANNO.did}`;}
+async function loadAnnotationPage(){
+  const a=ANNO;if(!a)return;$('#annoLoading').classList.remove('hidden');$('#annoPage').textContent=` ${a.page} / ${a.pages}페이지`;$('#annoStatus').textContent='필기 불러오는 중…';
+  try{const [x,preview]=await Promise.all([jf(`${annotationBase()}/annotations?page=${a.page}`),fetch(`${annotationBase()}/preview?page=${a.page}`,{headers:ACCESS?{'X-App-Code':ACCESS}:{}})]);if(!preview.ok)throw Error('자료 페이지를 불러오지 못했어.');const url=URL.createObjectURL(await preview.blob());if(ANNO!==a){URL.revokeObjectURL(url);return;}if(a.imageUrl)URL.revokeObjectURL(a.imageUrl);a.imageUrl=url;$('#annoImage').src=url;a.items=x.items||[];a.dirty=false;drawAnnotations();$('#annoStatus').textContent='원본과 분리 저장돼';}
+  catch(e){$('#annoStatus').textContent=e.message;}
+  document.querySelector('[data-anno-prev]').disabled=a.page<=1;document.querySelector('[data-anno-next]').disabled=a.page>=a.pages;
+}
+function resizeAnnotationCanvas(){if(!ANNO)return;const img=$('#annoImage'),c=$('#annoCanvas');if(!img?.naturalWidth)return;const rect=img.getBoundingClientRect(),ratio=devicePixelRatio||1;c.width=Math.max(1,Math.round(rect.width*ratio));c.height=Math.max(1,Math.round(rect.height*ratio));c.style.width=`${rect.width}px`;c.style.height=`${rect.height}px`;drawAnnotations();}
+function drawAnnotations(){if(!ANNO)return;const c=$('#annoCanvas'),ctx=c.getContext('2d'),w=c.width,h=c.height,scale=devicePixelRatio||1;ctx.clearRect(0,0,w,h);ctx.lineCap='round';ctx.lineJoin='round';for(const x of ANNO.items){ctx.fillStyle=ctx.strokeStyle=x.color;if(x.type==='stroke'){ctx.lineWidth=x.width*scale;ctx.beginPath();x.points.forEach((p,i)=>(i?ctx.lineTo(p[0]*w,p[1]*h):ctx.moveTo(p[0]*w,p[1]*h)));ctx.stroke();}else{ctx.font=`${x.size*scale}px system-ui,sans-serif`;ctx.textBaseline='top';ctx.fillText(x.text,x.x*w,x.y*h);}}}
+function annotationPoint(e){const r=$('#annoCanvas').getBoundingClientRect();return [Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))];}
+function annotationDown(e){if(!ANNO)return;e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);const p=annotationPoint(e);if(ANNO.tool==='text'){const text=$('#annoText').value.trim();if(!text)return $('#annoStatus').textContent='먼저 텍스트를 입력해줘.';ANNO.items.push({type:'text',color:$('#annoColor').value,size:Math.max(14,+$('#annoSize').value*2.5),x:p[0],y:p[1],text});ANNO.dirty=true;drawAnnotations();return;}ANNO.drawing={type:'stroke',color:$('#annoColor').value,width:+$('#annoSize').value,points:[p]};ANNO.items.push(ANNO.drawing);ANNO.dirty=true;}
+function annotationMove(e){if(!ANNO?.drawing)return;e.preventDefault();ANNO.drawing.points.push(annotationPoint(e));drawAnnotations();}
+function annotationUp(){if(ANNO)ANNO.drawing=null;}
+async function saveAnnotations(){if(!ANNO)return;const a=ANNO;$('#annoStatus').textContent='저장 중…';await jf(`${annotationBase()}/annotations?page=${a.page}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:a.items})});if(ANNO===a){a.dirty=false;$('#annoStatus').textContent='저장 완료';}}
+async function changeAnnotationPage(delta){if(!ANNO)return;try{if(ANNO.dirty)await saveAnnotations();ANNO.page+=delta;await loadAnnotationPage();}catch(e){$('#annoStatus').textContent=e.message;}}
+function annotationClick(e){const b=e.target.closest('button');if(!b||!ANNO)return;if(b.dataset.annoClose!==undefined){if(!ANNO.dirty||confirm('저장하지 않은 필기를 닫을까?'))closeAnnotator();}else if(b.dataset.annoTool){ANNO.tool=b.dataset.annoTool;document.querySelectorAll('[data-anno-tool]').forEach(x=>x.classList.toggle('active',x===b));$('#annoText').classList.toggle('hidden',ANNO.tool!=='text');}else if(b.dataset.annoUndo!==undefined){ANNO.items.pop();ANNO.dirty=true;drawAnnotations();}else if(b.dataset.annoClear!==undefined&&confirm('이 페이지의 필기를 모두 지울까?')){ANNO.items=[];ANNO.dirty=true;drawAnnotations();}else if(b.dataset.annoPrev!==undefined)changeAnnotationPage(-1);else if(b.dataset.annoNext!==undefined)changeAnnotationPage(1);else if(b.dataset.annoSave!==undefined)saveAnnotations().catch(x=>$('#annoStatus').textContent=x.message);}
 async function downloadFile(url,name){
   // Normal authenticated navigation also works with Android's DownloadListener.
   if(!ACCESS){const a=document.createElement('a');a.href=url;if(name)a.download=name;document.body.appendChild(a);a.click();a.remove();return;}

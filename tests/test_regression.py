@@ -38,6 +38,21 @@ def test_upload_partial_duplicate_original_and_isolation():
  assert c.get(base+f'/documents/{did}/file').status_code==403
  assert TestClient(server.app).get(base).status_code==403
 
+def test_document_preview_annotations_and_original_preserved():
+ c=TestClient(server.app);cid=setup_course(c);base=f'/api/p/1/courses/{cid}'
+ original=pdf_bytes();r=c.post(base+'/documents',files={'files':('write-on.pdf',original,'application/pdf')});did=r.json()['added'][0]['id']
+ preview=c.get(base+f'/documents/{did}/preview?page=1')
+ assert preview.status_code==200 and preview.headers['content-type']=='image/png' and preview.content.startswith(b'\x89PNG')
+ items=[{'type':'stroke','color':'#ff0000','width':5,'points':[[.1,.2],[.4,.5]]},{'type':'text','color':'#17231e','size':24,'x':.2,'y':.3,'text':'중요'}]
+ saved=c.put(base+f'/documents/{did}/annotations?page=1',json={'items':items})
+ assert saved.status_code==200 and saved.json()['count']==2
+ assert c.get(base+f'/documents/{did}/annotations?page=1').json()['items']==items
+ assert c.get(base+f'/documents/{did}/file').content==original
+ assert c.get(base+f'/documents/{did}/preview?page=2').status_code==400
+ assert c.put(base+f'/documents/{did}/annotations?page=1',json={'items':[{'type':'text','color':'bad','size':24,'x':0,'y':0,'text':'x'}]}).status_code==400
+ other=setup_course(c,'Other')
+ assert c.get(f'/api/p/1/courses/{other}/documents/{did}/annotations?page=1').status_code==404
+
 def test_analysis_and_tutor_receive_only_current_subject(monkeypatch):
  c=TestClient(server.app);cid=setup_course(c,'Physics');base=f'/api/p/1/courses/{cid}'
  c.post(base+'/documents',files={'files':('physics.pdf',pdf_bytes('PHYSICS_SENTINEL Force equals mass multiplied by acceleration. Newton describes the law of motion.'),'application/pdf')})
