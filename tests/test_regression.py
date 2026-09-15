@@ -85,3 +85,17 @@ def test_vision_request_schema_and_rotation(monkeypatch):
  monkeypatch.setattr(server,'client',lambda:type('Client',(),{'responses':Responses()})())
  path=server.DATA_ROOT/'fixture.png';path.write_bytes(image_bytes())
  assert server.visual_image_notes(path)==[{'page':1,'text':'a visible note'}]
+
+def test_visual_pdf_threshold_and_page_normalization():
+ assert server.needs_visual_pdf(3,1.0,2)
+ assert server.needs_visual_pdf(30,0.2,0)
+ assert not server.needs_visual_pdf(20,1.0,2)
+ pages=server.normalize_visual_pages([
+  {'page':2,'text':'  supply   curve  '},
+  {'page':'2','text':'supply curve'},
+  {'page':2,'text':'equilibrium graph'},
+  {'page':0,'text':'invalid'},
+  {'page':99,'text':'invalid'},
+  {'page':1,'text':''},
+ ],3)
+ assert pages==[{'page':2,'text':'supply curve\nequilibrium graph'}]
