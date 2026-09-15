@@ -37,7 +37,7 @@ img,svg,canvas,video{max-width:100%}.item,.bubble,.sub,.src,.course,.profile{ove
  #ws>.tabs{grid-column:1;align-self:start}
  .tabs{justify-content:flex-start}.tab{flex:1 1 90px}
  .gate{display:grid;grid-template-columns:minmax(0,2fr) minmax(230px,1fr);gap:24px;align-items:stretch}
- .gate>.card{margin:0}.gate>.notice{display:flex;align-items:center;padding:28px;font-size:16px;background:#e9f1d8;color:#354325;border-radius:20px;line-height:1.8}
+ .gate>.card{margin:0}.gate>.notice{display:block;padding:28px;font-size:16px;background:#e9f1d8;color:#354325;border-radius:20px;line-height:1.8}
  .chat{max-height:calc(var(--app-h) - 310px);min-height:180px}
 }
 @media(min-width:1600px){#ws{grid-template-columns:minmax(300px,.55fr) minmax(0,1.45fr)}}
@@ -52,3 +52,5 @@ img,svg,canvas,video{max-width:100%}.item,.bubble,.sub,.src,.course,.profile{ove
 }
 @media(max-height:500px) and (orientation:landscape){.side{position:static;max-height:none}.gate{margin:0}.chat{max-height:45vh;min-height:100px}.core-detail-sheet{max-height:92dvh!important}.top{position:static}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
+
+.profile:only-child{grid-column:1/-1}
