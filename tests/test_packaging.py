@@ -22,3 +22,15 @@ def test_builder_serves_only_signed_release_and_keeps_signer_on_volume():
     assert 'FOREST_KEYSTORE_PATH' in build
     assert 'apksigner' in build
     assert 'FOREST-9.1.0.apk' in build
+
+
+def test_ios_pwa_has_install_guidance_and_apple_metadata():
+    html = (ROOT / "static/index.html").read_text()
+    script = (ROOT / "static/app.js").read_text()
+    manifest = (ROOT / "static/manifest.webmanifest").read_text()
+    assert 'apple-mobile-web-app-capable' in html
+    assert 'apple-mobile-web-app-status-bar-style' in html
+    assert 'setupInstallHelp' in script
+    assert '홈 화면에 추가' in script
+    assert 'navigator.standalone' in script
+    assert '"orientation": "any"' in manifest
