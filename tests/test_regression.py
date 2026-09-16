@@ -7,6 +7,7 @@ import fitz
 from PIL import Image
 from fastapi.testclient import TestClient
 import server
+import forest_app
 
 def pdf_bytes(text='Economics studies supply and demand. Higher prices reduce quantity demanded, all else equal.'):
  d=fitz.open();p=d.new_page();p.insert_text((72,72),text);b=d.tobytes();d.close();return b
@@ -85,10 +86,10 @@ def test_backup_and_snapshot_preserve_existing_records():
  c=TestClient(server.app);cid=setup_course(c);base=f'/api/p/1/courses/{cid}'
  c.post(base+'/documents',files={'files':('lecture.pdf',pdf_bytes(),'application/pdf')})
  before=c.get(base).json();server.snapshot_existing_database()
- assert (server.DATA_ROOT/'backups'/'before-9.0.0.sqlite3').exists()
+ assert (server.DATA_ROOT/'backups'/'before-9.2.0.sqlite3').exists()
  assert c.get(base).json()==before
  backup=c.get('/api/p/1/backup').json()
- assert backup['format_version']==2 and 'text_json' in backup['documents'][0] and 'exam_patterns' in backup
+ assert backup['format_version']==4 and 'text_json' in backup['documents'][0] and 'exam_patterns' in backup and 'lecture_sessions' in backup
  assert c.get(base).headers['cache-control']=='no-store'
  assert c.get('/').status_code==200
 
@@ -115,3 +116,23 @@ def test_visual_pdf_threshold_and_page_normalization():
   {'page':1,'text':''},
  ],3)
  assert pages==[{'page':2,'text':'supply curve\nequilibrium graph'}]
+
+def test_lecture_api_audio_transcript_realtime_and_profile_isolation(monkeypatch):
+ c=TestClient(server.app);cid=setup_course(c,'Lecture API');base=f'/api/p/1/courses/{cid}'
+ created=c.post(base+'/lectures',json={'title':'Week 1'});assert created.status_code==200,created.text;sid=created.json()['id']
+ assert c.get(base+'/lectures').json()['lectures'][0]['id']==sid
+ first=c.post(base+f'/lectures/{sid}/transcript',json={'text':'시험에 꼭 나옵니다','start_seconds':2,'end_seconds':4,'client_event_id':'event-1'})
+ assert first.status_code==200 and not first.json()['duplicate'];segment_id=first.json()['id']
+ duplicate=c.post(base+f'/lectures/{sid}/transcript',json={'text':'시험에 꼭 나옵니다','client_event_id':'event-1'}).json()
+ assert duplicate['id']==segment_id and duplicate['duplicate']
+ assert c.patch(base+f'/lectures/{sid}/transcript/{segment_id}',json={'importance':'user'}).status_code==200
+ assert c.post(base+f'/lectures/{sid}/classify-transcript',json={'text':'시험에 꼭 나옵니다'}).json()['importance']=='professor'
+ audio=b'webm-audio-fixture-data';saved=c.post(base+f'/lectures/{sid}/audio',data={'duration_seconds':'12.5'},files={'audio':('lecture.webm',audio,'audio/webm')})
+ assert saved.status_code==200,saved.text
+ downloaded=c.get(base+f'/lectures/{sid}/audio');assert downloaded.status_code==200 and downloaded.content==audio
+ note=c.post(base+f'/lectures/{sid}/finalize-note').json();assert '시험에 꼭 나옵니다' in note['text'] and note['user_count']==1
+ monkeypatch.setattr(forest_app,'_openai_realtime_secret',lambda key,safety:{'value':'ek_test','expires_at':123})
+ monkeypatch.setenv('OPENAI_API_KEY','sk-test')
+ assert c.post(base+'/realtime-token').json()=={'value':'ek_test','expires_at':123}
+ guest=next(p['id'] for p in c.get('/api/profiles').json() if not p['is_owner']);c.post(f'/api/profiles/{guest}/verify',data={'pin':'1234'})
+ assert c.get(base+'/lectures').status_code==403

@@ -41,7 +41,7 @@ def get_session_secret():
 
 SESSION_SECRET=get_session_secret()
 IS_HTTPS=os.getenv("COOKIE_HTTPS_ONLY", "1" if os.getenv("RAILWAY_PROJECT_ID") else "0")=="1"
-APP_VERSION="9.0.0"
+APP_VERSION="9.2.0"
 app=FastAPI(title="FOR'EST",version=APP_VERSION)
 
 def nowiso(): return datetime.now().isoformat(timespec="seconds")
