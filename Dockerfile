@@ -11,8 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && mkdir -p /data
 
 COPY server.py /app/server.py
+COPY forest_app.py /app/forest_app.py
 COPY static /app/static
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "exec uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "exec uvicorn forest_app:app --host 0.0.0.0 --port ${PORT:-8000}"]
