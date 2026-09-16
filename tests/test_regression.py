@@ -89,7 +89,7 @@ def test_backup_and_snapshot_preserve_existing_records():
  assert (server.DATA_ROOT/'backups'/'before-9.2.0.sqlite3').exists()
  assert c.get(base).json()==before
  backup=c.get('/api/p/1/backup').json()
- assert backup['format_version']==4 and 'text_json' in backup['documents'][0] and 'exam_patterns' in backup and 'lecture_sessions' in backup
+ assert backup['format_version']==5 and 'text_json' in backup['documents'][0] and 'exam_patterns' in backup and 'lecture_sessions' in backup
  assert c.get(base).headers['cache-control']=='no-store'
  assert c.get('/').status_code==200
 
@@ -158,3 +158,22 @@ def test_lecture_api_audio_transcript_realtime_and_profile_isolation(monkeypatch
  assert c.post(base+'/realtime-token').json()=={'value':'ek_test','expires_at':123}
  guest=next(p['id'] for p in c.get('/api/profiles').json() if not p['is_owner']);c.post(f'/api/profiles/{guest}/verify',data={'pin':'1234'})
  assert c.get(base+'/lectures').status_code==403
+
+def test_uploaded_recording_transcribes_and_builds_student_study_pack(monkeypatch):
+ c=TestClient(server.app);cid=setup_course(c,'Uploaded Lecture');base=f'/api/p/1/courses/{cid}'
+ uploaded=c.post(base+'/lectures/upload',data={'title':'Uploaded week 2','duration_seconds':'61'},files={'audio':('week2.mp3',b'long-enough-audio-fixture','audio/mpeg')})
+ assert uploaded.status_code==200,uploaded.text;sid=uploaded.json()['id']
+ monkeypatch.setattr(forest_app,'_transcribe_audio_file',lambda path:[
+  {'start':0,'end':8,'text':'오늘 핵심은 수요 곡선의 이동입니다.','speaker':'교수','event':'batch:0'},
+  {'start':8,'end':15,'text':'시험에 꼭 나오는 비교입니다.','speaker':'교수','event':'batch:1'},
+ ])
+ result=c.post(base+f'/lectures/{sid}/transcribe');assert result.status_code==202,result.text
+ lecture=c.get(base+'/lectures').json()['lectures'][0]
+ assert lecture['source_kind']=='uploaded' and lecture['transcript_status']=='ready' and lecture['transcript_count']==2
+ transcript=c.get(base+f'/lectures/{sid}/transcript').json()['segments']
+ assert transcript[0]['speaker']=='교수' and transcript[1]['importance']=='professor'
+ monkeypatch.setattr(server,'json_call',lambda prompt,schema:None)
+ pack=c.post(base+f'/lectures/{sid}/study-pack');assert pack.status_code==200,pack.text
+ data=pack.json();assert len(data['questions'])>=1 and any(x['timestamp_seconds']==8 for x in data['key_points'])
+ profile=c.get(base+'/learning-profile').json()
+ assert profile['evidence']['lecture_count']>=1 and profile['recommendations']

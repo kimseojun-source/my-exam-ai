@@ -5,7 +5,7 @@ import os
 import urllib.error
 import urllib.request
 from pathlib import Path
-from fastapi import File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.routing import Mount
@@ -63,6 +63,17 @@ def ensure_lectures(con):
     CREATE INDEX IF NOT EXISTS idx_transcript_segments_lecture ON transcript_segments(lecture_id,start_seconds,id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_transcript_event_unique ON transcript_segments(lecture_id,client_event_id) WHERE client_event_id<>'';
     ''')
+    columns={r['name'] for r in con.execute('PRAGMA table_info(lecture_sessions)').fetchall()}
+    for name,declaration in (
+        ('source_kind',"TEXT NOT NULL DEFAULT 'recorded'"),
+        ('transcript_status',"TEXT NOT NULL DEFAULT 'pending'"),
+        ('transcript_error',"TEXT NOT NULL DEFAULT ''"),
+        ('analysis_json',"TEXT NOT NULL DEFAULT '{}'"),
+        ('analyzed_at',"TEXT NOT NULL DEFAULT ''"),
+    ):
+        if name not in columns:con.execute(f'ALTER TABLE lecture_sessions ADD COLUMN {name} {declaration}')
+    transcript_columns={r['name'] for r in con.execute('PRAGMA table_info(transcript_segments)').fetchall()}
+    if 'speaker' not in transcript_columns:con.execute("ALTER TABLE transcript_segments ADD COLUMN speaker TEXT NOT NULL DEFAULT ''")
 
 def lecture_row(pid,cid,sid):
     server.course_row(pid,cid);con=server.db();ensure_lectures(con)
@@ -104,11 +115,10 @@ def list_lectures(pid:int,cid:int):
     for row in rows:row['has_audio']=bool(row.pop('audio_path',''))
     return {'lectures':rows}
 
-@app.post('/api/p/{pid}/courses/{cid}/lectures/{sid}/audio')
-async def save_lecture_audio(pid:int,cid:int,sid:int,audio:UploadFile=File(...),duration_seconds:str=Form('0')):
+async def store_lecture_audio(pid,cid,sid,audio,duration_seconds):
     old=lecture_row(pid,cid,sid);duration=clean_seconds(duration_seconds,'녹음')
-    mime=(audio.content_type or '').lower();extensions={'audio/webm':'.webm','audio/mp4':'.m4a','audio/mpeg':'.mp3','audio/ogg':'.ogg','audio/wav':'.wav','audio/x-wav':'.wav'}
-    if mime not in extensions:raise HTTPException(415,'지원하지 않는 녹음 형식이야.')
+    mime=(audio.content_type or '').lower().split(';')[0];extensions={'audio/webm':'.webm','audio/mp4':'.m4a','audio/mpeg':'.mp3','audio/ogg':'.ogg','audio/wav':'.wav','audio/x-wav':'.wav','audio/aac':'.aac','audio/x-m4a':'.m4a'}
+    if mime not in extensions:raise HTTPException(415,'MP3, M4A, WAV, WebM, OGG, AAC 녹음 파일을 올려줘.')
     folder=server.DATA/f'p{pid}'/f'c{cid}'/'lectures';folder.mkdir(parents=True,exist_ok=True)
     temporary=folder/f'.lecture-{sid}.upload';size=0;digest=hashlib.sha256()
     try:
@@ -120,12 +130,26 @@ async def save_lecture_audio(pid:int,cid:int,sid:int,audio:UploadFile=File(...),
         if size<16:raise HTTPException(400,'녹음 파일이 비어 있어.')
         destination=folder/f'{sid}-{digest.hexdigest()[:16]}{extensions[mime]}'
         temporary.replace(destination)
-        con=server.db();ensure_lectures(con);con.execute("UPDATE lecture_sessions SET duration_seconds=?,audio_path=?,audio_mime=?,status='saved' WHERE id=? AND course_id=?",(duration,str(destination),mime,sid,cid));con.commit();con.close()
+        con=server.db();ensure_lectures(con);count=con.execute('SELECT COUNT(*) FROM transcript_segments WHERE lecture_id=?',(sid,)).fetchone()[0]
+        con.execute("UPDATE lecture_sessions SET duration_seconds=?,audio_path=?,audio_mime=?,status='saved',transcript_status=?,transcript_error='',analysis_json='{}',analyzed_at='' WHERE id=? AND course_id=?",(duration,str(destination),mime,'ready' if count else 'pending',sid,cid));con.commit();con.close()
         previous=Path(old.get('audio_path') or '')
         if previous!=destination and previous.is_file() and previous.is_relative_to(folder.resolve()):previous.unlink(missing_ok=True)
-        return {'ok':True,'id':sid,'bytes':size,'duration_seconds':duration,'status':'saved'}
+        return {'ok':True,'id':sid,'bytes':size,'duration_seconds':duration,'status':'saved','transcript_status':'ready' if count else 'pending'}
     except Exception:
         temporary.unlink(missing_ok=True);raise
+
+@app.post('/api/p/{pid}/courses/{cid}/lectures/{sid}/audio')
+async def save_lecture_audio(pid:int,cid:int,sid:int,audio:UploadFile=File(...),duration_seconds:str=Form('0')):
+    return await store_lecture_audio(pid,cid,sid,audio,duration_seconds)
+
+@app.post('/api/p/{pid}/courses/{cid}/lectures/upload')
+async def upload_lecture(pid:int,cid:int,audio:UploadFile=File(...),title:str=Form(''),duration_seconds:str=Form('0')):
+    server.course_row(pid,cid);clean_title=title.strip() or Path(audio.filename or '').stem or '업로드한 강의'
+    if len(clean_title)>200:raise HTTPException(400,'강의 제목은 200자까지 입력할 수 있어.')
+    con=server.db();ensure_lectures(con);cur=con.execute("INSERT INTO lecture_sessions(course_id,title,source_kind,created_at) VALUES(?,?,?,?)",(cid,clean_title,'uploaded',server.nowiso()));con.commit();sid=cur.lastrowid;con.close()
+    try:return await store_lecture_audio(pid,cid,sid,audio,duration_seconds)
+    except Exception:
+        con=server.db();con.execute('DELETE FROM lecture_sessions WHERE id=? AND course_id=?',(sid,cid));con.commit();con.close();raise
 
 @app.get('/api/p/{pid}/courses/{cid}/lectures/{sid}/audio')
 def get_lecture_audio(pid:int,cid:int,sid:int):
@@ -146,13 +170,13 @@ async def add_transcript(pid:int,cid:int,sid:int,request:Request):
     if not text or len(text)>10000:raise HTTPException(400,'자막은 1~10000자로 입력해줘.')
     start=clean_seconds(data.get('start_seconds'),'시작');end=clean_seconds(data.get('end_seconds',start),'종료')
     if end<start:end=start
-    importance=clean_importance(data.get('importance'));event=str(data.get('client_event_id') or '').strip()
+    importance=clean_importance(data.get('importance'));event=str(data.get('client_event_id') or '').strip();speaker=str(data.get('speaker') or '').strip()[:40]
     if len(event)>200:raise HTTPException(400,'자막 이벤트 정보가 너무 길어.')
     con=server.db();ensure_lectures(con)
     if event:
         old=con.execute('SELECT id FROM transcript_segments WHERE lecture_id=? AND client_event_id=?',(sid,event)).fetchone()
         if old:con.commit();con.close();return {'ok':True,'id':old['id'],'duplicate':True}
-    cur=con.execute('INSERT INTO transcript_segments(lecture_id,start_seconds,end_seconds,text,importance,client_event_id,created_at) VALUES(?,?,?,?,?,?,?)',(sid,start,end,text,importance,event,server.nowiso()));con.commit();segment_id=cur.lastrowid;con.close();return {'ok':True,'id':segment_id,'duplicate':False}
+    cur=con.execute('INSERT INTO transcript_segments(lecture_id,start_seconds,end_seconds,text,importance,client_event_id,created_at,speaker) VALUES(?,?,?,?,?,?,?,?)',(sid,start,end,text,importance,event,server.nowiso(),speaker));con.commit();segment_id=cur.lastrowid;con.close();return {'ok':True,'id':segment_id,'duplicate':False}
 
 @app.patch('/api/p/{pid}/courses/{cid}/lectures/{sid}/transcript/{segment_id}')
 async def update_transcript(pid:int,cid:int,sid:int,segment_id:int,request:Request):
@@ -175,6 +199,52 @@ def delete_transcript(pid:int,cid:int,sid:int,segment_id:int):
     lecture_row(pid,cid,sid);con=server.db();ensure_lectures(con);cur=con.execute('DELETE FROM transcript_segments WHERE id=? AND lecture_id=?',(segment_id,sid));con.commit();con.close()
     if not cur.rowcount:raise HTTPException(404,'자막 문장을 찾지 못했어.')
     return {'ok':True}
+
+def _plain(value):
+    if hasattr(value,'model_dump'):return value.model_dump()
+    if isinstance(value,dict):return value
+    return {key:getattr(value,key) for key in ('text','segments','start','end','speaker') if hasattr(value,key)}
+
+def _transcribe_audio_file(path):
+    if path.stat().st_size>24*1024*1024:raise ValueError('AI 자막 변환은 파일당 24MB까지 가능해. 음질을 낮춰 MP3로 압축한 뒤 다시 올려줘.')
+    client=server.client()
+    if not client:raise RuntimeError('OpenAI API 키가 연결되지 않았어.')
+    model=os.getenv('OPENAI_AUDIO_MODEL','gpt-4o-transcribe-diarize')
+    with path.open('rb') as source:
+        result=client.audio.transcriptions.create(model=model,file=source,response_format='diarized_json',chunking_strategy='auto',language='ko')
+    data=_plain(result);segments=[]
+    for index,item in enumerate(data.get('segments') or []):
+        item=_plain(item);text=str(item.get('text') or '').strip()
+        if not text:continue
+        segments.append({'start':float(item.get('start') or 0),'end':float(item.get('end') or item.get('start') or 0),'text':text,'speaker':str(item.get('speaker') or '')[:40],'event':f'batch:{index}'})
+    if not segments and str(data.get('text') or '').strip():segments=[{'start':0,'end':0,'text':str(data['text']).strip(),'speaker':'','event':'batch:0'}]
+    if not segments:raise RuntimeError('녹음에서 말소리를 찾지 못했어.')
+    return segments
+
+def _run_transcription(pid,cid,sid):
+    try:
+        lecture=lecture_row(pid,cid,sid);path=Path(lecture.get('audio_path') or '').resolve()
+        if not path.is_relative_to(server.DATA.resolve()) or not path.is_file():raise RuntimeError('저장된 녹음 파일이 없어.')
+        segments=_transcribe_audio_file(path);stamp=server.nowiso();con=server.db();ensure_lectures(con)
+        con.execute("DELETE FROM transcript_segments WHERE lecture_id=? AND client_event_id LIKE 'batch:%'",(sid,))
+        for item in segments:
+            importance=classify_importance(item['text'])
+            con.execute('INSERT INTO transcript_segments(lecture_id,start_seconds,end_seconds,text,importance,client_event_id,created_at,speaker) VALUES(?,?,?,?,?,?,?,?)',(sid,clean_seconds(item['start'],'시작'),clean_seconds(item['end'],'종료'),item['text'][:10000],importance,item['event'],stamp,item['speaker']))
+        con.execute("UPDATE lecture_sessions SET transcript_status='ready',transcript_error='',analysis_json='{}',analyzed_at='' WHERE id=? AND course_id=?",(sid,cid));con.commit();con.close()
+    except Exception as exc:
+        server.logging.exception('Lecture transcription failed for %s',sid)
+        con=server.db();ensure_lectures(con);con.execute("UPDATE lecture_sessions SET transcript_status='error',transcript_error=? WHERE id=? AND course_id=?",(str(exc)[:500],sid,cid));con.commit();con.close()
+
+@app.post('/api/p/{pid}/courses/{cid}/lectures/{sid}/transcribe',status_code=202)
+def transcribe_lecture(pid:int,cid:int,sid:int,background_tasks:BackgroundTasks):
+    lecture=lecture_row(pid,cid,sid)
+    if not lecture.get('audio_path'):raise HTTPException(400,'먼저 녹음 파일을 저장해줘.')
+    con=server.db();ensure_lectures(con);existing=con.execute('SELECT COUNT(*) FROM transcript_segments WHERE lecture_id=?',(sid,)).fetchone()[0]
+    if existing:
+        con.execute("UPDATE lecture_sessions SET transcript_status='ready',transcript_error='' WHERE id=?",(sid,));con.commit();con.close();return {'status':'ready','segments':existing}
+    if lecture.get('transcript_status')=='processing':con.close();return {'status':'processing'}
+    con.execute("UPDATE lecture_sessions SET transcript_status='processing',transcript_error='' WHERE id=?",(sid,));con.commit();con.close();background_tasks.add_task(_run_transcription,pid,cid,sid)
+    return {'status':'processing'}
 
 def _openai_realtime_secret(api_key,safety_identifier):
     body=json.dumps({'expires_after':{'anchor':'created_at','seconds':120},'session':{'type':'transcription','audio':{'input':{'noise_reduction':{'type':'far_field'},'transcription':{'model':os.getenv('OPENAI_TRANSCRIBE_MODEL','gpt-live-transcribe'),'language':'ko'},'turn_detection':{'type':'server_vad'}}}}}).encode()
@@ -208,6 +278,78 @@ def classify_importance(text,before='',after=''):
 async def classify_transcript(pid:int,cid:int,sid:int,request:Request):
     lecture_row(pid,cid,sid);data=await request.json();text=str(data.get('text') or '')
     return {'importance':classify_importance(text,str(data.get('before') or ''),str(data.get('after') or ''))}
+
+LECTURE_PACK_SCHEMA={'type':'object','properties':{
+  'summary':{'type':'string'},
+  'key_points':{'type':'array','items':{'type':'object','properties':{'text':{'type':'string'},'timestamp_seconds':{'type':'number'},'why':{'type':'string'}},'required':['text','timestamp_seconds','why'],'additionalProperties':False}},
+  'missing_or_unclear':{'type':'array','items':{'type':'string'}},
+  'flashcards':{'type':'array','items':{'type':'object','properties':{'front':{'type':'string'},'back':{'type':'string'}},'required':['front','back'],'additionalProperties':False}},
+  'questions':{'type':'array','items':{'type':'object','properties':{'question':{'type':'string'},'answer':{'type':'string'},'reason':{'type':'string'}},'required':['question','answer','reason'],'additionalProperties':False}},
+  'next_actions':{'type':'array','items':{'type':'string'}},
+  'style_observation':{'type':'string'}
+},'required':['summary','key_points','missing_or_unclear','flashcards','questions','next_actions','style_observation'],'additionalProperties':False}
+
+def learning_profile(pid,cid):
+    server.course_row(pid,cid);con=server.db();ensure_lectures(con)
+    attempts=con.execute('SELECT score,detail_json FROM attempts WHERE course_id=? ORDER BY id DESC LIMIT 20',(cid,)).fetchall()
+    reviews=con.execute('SELECT rating FROM card_reviews WHERE course_id=? ORDER BY id DESC LIMIT 50',(cid,)).fetchall()
+    lectures=con.execute("SELECT COUNT(*) total,COALESCE(SUM(duration_seconds),0) seconds,SUM(CASE WHEN source_kind='uploaded' THEN 1 ELSE 0 END) uploaded FROM lecture_sessions WHERE course_id=?",(cid,)).fetchone()
+    transcript_count=con.execute('SELECT COUNT(*) FROM transcript_segments t JOIN lecture_sessions l ON l.id=t.lecture_id WHERE l.course_id=?',(cid,)).fetchone()[0];con.close()
+    scores=[float(x['score']) for x in attempts];ratings=[int(x['rating']) for x in reviews];wrong=0
+    for row in attempts:
+        try:wrong+=len(json.loads(row['detail_json'] or '{}').get('wrong',[]))
+        except Exception:pass
+    average_score=round(sum(scores)/len(scores),1) if scores else None;average_rating=round(sum(ratings)/len(ratings),1) if ratings else None
+    observations=[];recommendations=[]
+    if lectures['total'] and not attempts:
+        observations.append('강의는 모으고 있지만 회상 문제 기록은 아직 없어 수동 청취에 머물 가능성이 있어.')
+        recommendations.append('강의마다 3문제 즉시 회상으로 듣기만 한 내용을 꺼내 본다.')
+    if average_score is not None and average_score<70:
+        observations.append('최근 문제 점수 기준으로 개념을 더 작은 단위로 나눌 필요가 있어.')
+        recommendations.append('오답 개념을 짧게 설명한 뒤 비슷한 문제를 다시 푼다.')
+    if average_rating is not None and average_rating<2.5:
+        observations.append('복습 카드에서 어렵다는 반응이 많아 반복 간격을 짧게 잡는 편이 좋아.')
+        recommendations.append('오늘 어려웠던 카드부터 짧게 여러 번 회상한다.')
+    if not observations:observations.append('아직 학습 기록이 적어 스타일을 단정하지 않고 반응 데이터를 더 모으는 중이야.')
+    if not recommendations:recommendations.append('강의 핵심 문제와 카드 반응을 쌓아 개인화 정확도를 높인다.')
+    return {'evidence':{'lecture_count':lectures['total'],'uploaded_lecture_count':lectures['uploaded'] or 0,'recorded_minutes':round(float(lectures['seconds'] or 0)/60,1),'transcript_segments':transcript_count,'quiz_attempts':len(scores),'average_score':average_score,'card_reviews':len(ratings),'average_card_rating':average_rating,'wrong_answers':wrong},'observations':observations,'recommendations':recommendations}
+
+@app.get('/api/p/{pid}/courses/{cid}/learning-profile')
+def get_learning_profile(pid:int,cid:int):return learning_profile(pid,cid)
+
+def fallback_lecture_pack(lecture,segments,profile):
+    important=[x for x in segments if x['importance']!='normal'] or segments[:5]
+    return {'summary':' '.join(x['text'] for x in segments[:8])[:1600],'key_points':[{'text':x['text'],'timestamp_seconds':float(x['start_seconds']),'why':'강의에서 강조되었거나 앞부분의 핵심 내용'} for x in important[:6]],'missing_or_unclear':[],'flashcards':[{'front':x['text'][:70]+'의 핵심은?','back':x['text']} for x in important[:6]],'questions':[{'question':x['text'][:90]+'을 자신의 말로 설명해 봐.','answer':x['text'],'reason':'수동 청취를 능동 회상으로 바꾸기 위해'} for x in important[:3]],'next_actions':profile['recommendations'][:3],'style_observation':profile['observations'][0]}
+
+@app.post('/api/p/{pid}/courses/{cid}/lectures/{sid}/study-pack')
+def create_lecture_study_pack(pid:int,cid:int,sid:int):
+    lecture=lecture_row(pid,cid,sid)
+    try:cached=json.loads(lecture.get('analysis_json') or '{}')
+    except Exception:cached={}
+    if cached:return cached
+    segments=get_transcript(pid,cid,sid)['segments']
+    if not segments:raise HTTPException(400,'먼저 실시간 자막을 저장하거나 녹음 파일을 AI 자막으로 변환해줘.')
+    profile=learning_profile(pid,cid);course=server.course_row(pid,cid);transcript='\n'.join(f"[{float(x['start_seconds']):.1f}초] {x.get('speaker') or ''} {x['text']}" for x in segments)[:50000]
+    chunks=server.chunks_from_docs(server.course_docs(pid,cid));related=server.retrieve(chunks,' '.join(x['text'] for x in segments)[:12000],10) if chunks else []
+    sources='\n'.join(f"[{x['doc']} p.{x['page']}] {x['text']}" for x in related)[:18000]
+    prompt=f"""너는 학생의 수동적인 강의 청취를 능동 학습으로 바꾸는 코치다.
+사용자/과목 경계: profile:{pid}/course:{cid}, 과목: {course['name']}, 강의: {lecture['title']}.
+아래 강의 자막과 이 과목 자료만 사용한다. 자막에 없는 사실을 지어내지 말고 불명확한 내용은 missing_or_unclear에 적는다.
+요약만 하지 말고 시험에 쓸 수 있는 핵심, 해당 타임스탬프, 회상 카드 5~10개, 확인 문제 3~5개, 바로 할 행동을 만든다.
+학습 기록은 성격 유형이 아니라 현재 행동 근거다. 데이터가 적으면 단정하지 말고, 수동 청취 위험과 필요한 학습 행동을 구체적으로 제안한다.
+
+학습 기록: {json.dumps(profile,ensure_ascii=False)}
+
+강의 자막:
+{transcript}
+
+관련 과목 자료:
+{sources or '등록된 관련 자료 없음'}"""
+    try:pack=server.json_call(prompt,LECTURE_PACK_SCHEMA)
+    except Exception as exc:server.logging.warning('Lecture study pack failed: %r',exc);pack=None
+    if not pack:pack=fallback_lecture_pack(lecture,segments,profile)
+    pack['lecture_id']=sid;pack['title']=lecture['title'];pack['learning_profile']=profile
+    con=server.db();ensure_lectures(con);con.execute('UPDATE lecture_sessions SET analysis_json=?,analyzed_at=? WHERE id=? AND course_id=?',(json.dumps(pack,ensure_ascii=False),server.nowiso(),sid,cid));con.commit();con.close();return pack
 
 @app.post('/api/p/{pid}/courses/{cid}/lectures/{sid}/finalize-note')
 def finalize_lecture_note(pid:int,cid:int,sid:int):
@@ -296,11 +438,11 @@ app.router.routes[:]=[r for r in app.router.routes if getattr(r,'path',None)!='/
 @app.get('/api/p/{pid}/backup')
 def backup_v3(pid:int):
     p=server.profile_row(pid);con=server.db();ensure_marks(con);ensure_lectures(con);courses=[dict(x) for x in con.execute('SELECT * FROM courses WHERE profile_id=?',(pid,)).fetchall()];ids=[x['id'] for x in courses]
-    data={'profile':{'id':p['id'],'name':p['name']},'courses':courses,'documents':[],'attempts':[],'card_reviews':[],'tutor_messages':[],'exam_patterns':[],'document_annotations':[],'user_marks':[],'lecture_sessions':[],'transcript_segments':[],'format_version':4}
+    data={'profile':{'id':p['id'],'name':p['name']},'courses':courses,'documents':[],'attempts':[],'card_reviews':[],'tutor_messages':[],'exam_patterns':[],'document_annotations':[],'user_marks':[],'lecture_sessions':[],'transcript_segments':[],'format_version':5}
     for cid in ids:
         docs=[dict(x) for x in con.execute('SELECT id,course_id,name,pages,text_json,sha256,document_type,extraction_mode,image_count,created_at FROM documents WHERE course_id=?',(cid,)).fetchall()];data['documents']+=docs;data['attempts'] += [dict(x) for x in con.execute('SELECT * FROM attempts WHERE course_id=?',(cid,)).fetchall()];data['card_reviews'] += [dict(x) for x in con.execute('SELECT * FROM card_reviews WHERE course_id=?',(cid,)).fetchall()];data['tutor_messages'] += [dict(x) for x in con.execute('SELECT * FROM tutor_messages WHERE course_id=?',(cid,)).fetchall()];data['exam_patterns'] += [dict(x) for x in con.execute('SELECT * FROM exam_patterns WHERE course_id=?',(cid,)).fetchall()];data['user_marks'] += [dict(x) for x in con.execute('SELECT * FROM user_marks WHERE course_id=?',(cid,)).fetchall()]
         for d in docs:data['document_annotations'] += [dict(x) for x in con.execute('SELECT document_id,page,data_json,updated_at FROM document_annotations WHERE document_id=?',(d['id'],)).fetchall()]
-        lectures=[dict(x) for x in con.execute("SELECT id,course_id,title,duration_seconds,audio_mime,status,created_at FROM lecture_sessions WHERE course_id=?",(cid,)).fetchall()];data['lecture_sessions']+=lectures
+        lectures=[dict(x) for x in con.execute("SELECT id,course_id,title,duration_seconds,audio_mime,status,source_kind,transcript_status,transcript_error,analysis_json,analyzed_at,created_at FROM lecture_sessions WHERE course_id=?",(cid,)).fetchall()];data['lecture_sessions']+=lectures
         for lecture in lectures:data['transcript_segments'] += [dict(x) for x in con.execute('SELECT * FROM transcript_segments WHERE lecture_id=?',(lecture['id'],)).fetchall()]
     con.commit();con.close();return JSONResponse(data,headers={'Content-Disposition':f'attachment; filename="forest_profile_{pid}_backup_v3.json"'})
 
