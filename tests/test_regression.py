@@ -159,6 +159,16 @@ def test_lecture_api_audio_transcript_realtime_and_profile_isolation(monkeypatch
  guest=next(p['id'] for p in c.get('/api/profiles').json() if not p['is_owner']);c.post(f'/api/profiles/{guest}/verify',data={'pin':'1234'})
  assert c.get(base+'/lectures').status_code==403
 
+def test_recording_cancel_removes_draft_and_transcript_but_not_saved_recording():
+ c=TestClient(server.app);cid=setup_course(c,'Cancel lecture');base=f'/api/p/1/courses/{cid}'
+ created=c.post(base+'/lectures',json={'title':'Wrong recording'});sid=created.json()['id']
+ assert c.post(base+f'/lectures/{sid}/transcript',json={'text':'버릴 자막','client_event_id':'cancel-1'}).status_code==200
+ cancelled=c.delete(base+f'/lectures/{sid}');assert cancelled.status_code==200,cancelled.text
+ assert all(x['id']!=sid for x in c.get(base+'/lectures').json()['lectures'])
+ saved=c.post(base+'/lectures',json={'title':'Keep recording'}).json()['id']
+ assert c.post(base+f'/lectures/{saved}/audio',data={'duration_seconds':'3'},files={'audio':('lecture.webm',b'valid-recording-audio','audio/webm')}).status_code==200
+ assert c.delete(base+f'/lectures/{saved}').status_code==409
+
 def test_uploaded_recording_transcribes_and_builds_student_study_pack(monkeypatch):
  c=TestClient(server.app);cid=setup_course(c,'Uploaded Lecture');base=f'/api/p/1/courses/{cid}'
  uploaded=c.post(base+'/lectures/upload',data={'title':'Uploaded week 2','duration_seconds':'61'},files={'audio':('week2.mp3',b'long-enough-audio-fixture','audio/mpeg')})

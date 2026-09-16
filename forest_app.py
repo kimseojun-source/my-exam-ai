@@ -115,6 +115,17 @@ def list_lectures(pid:int,cid:int):
     for row in rows:row['has_audio']=bool(row.pop('audio_path',''))
     return {'lectures':rows}
 
+@app.delete('/api/p/{pid}/courses/{cid}/lectures/{sid}')
+def cancel_lecture(pid:int,cid:int,sid:int):
+    lecture=lecture_row(pid,cid,sid)
+    if lecture.get('source_kind')!='recorded' or lecture.get('status')!='recording' or lecture.get('audio_path'):
+        raise HTTPException(409,'저장이 끝난 녹음은 녹음 중 취소로 삭제할 수 없어.')
+    con=server.db();ensure_lectures(con)
+    cur=con.execute("DELETE FROM lecture_sessions WHERE id=? AND course_id=? AND source_kind='recorded' AND status='recording' AND COALESCE(audio_path,'')=''",(sid,cid))
+    con.commit();con.close()
+    if not cur.rowcount:raise HTTPException(409,'이미 저장되었거나 취소된 녹음이야.')
+    return {'ok':True,'deleted':sid}
+
 async def store_lecture_audio(pid,cid,sid,audio,duration_seconds):
     old=lecture_row(pid,cid,sid);duration=clean_seconds(duration_seconds,'녹음')
     mime=(audio.content_type or '').lower().split(';')[0];extensions={'audio/webm':'.webm','audio/mp4':'.m4a','audio/mpeg':'.mp3','audio/ogg':'.ogg','audio/wav':'.wav','audio/x-wav':'.wav','audio/aac':'.aac','audio/x-m4a':'.m4a'}

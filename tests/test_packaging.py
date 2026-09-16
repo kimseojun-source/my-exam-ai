@@ -76,6 +76,10 @@ def test_recording_ui_and_native_microphone_bridge():
     assert 'id="liveTranscript"' in html
     assert "navigator.mediaDevices.getUserMedia" in script
     assert "new MediaRecorder" in script
+    assert 'id="cancelRecording"' in html
+    assert "cancelLectureRecording" in script
+    assert 'id="pauseRecording"' in html
+    assert "toggleLectureRecordingPause" in script
     assert "createDataChannel('oai-events')" in script
     assert "/v1/realtime/calls" in script
     assert "RESOURCE_AUDIO_CAPTURE" in activity
