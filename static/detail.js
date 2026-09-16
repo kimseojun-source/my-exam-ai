@@ -1,64 +1,32 @@
-
 (function(){
-  const CATEGORY_BY_TITLE={
-    "무조건 암기":"must_memorize","이해 필수":"must_understand","출제 핫스팟":"exam_hotspots",
-    "헷갈리는 비교":"confusing_pairs","공식·프레임워크":"formula_or_frameworks"
-  };
+  const CATEGORY_BY_TITLE={"무조건 암기":"must_memorize","이해 필수":"must_understand","출제 핫스팟":"exam_hotspots","헷갈리는 비교":"confusing_pairs","공식·프레임워크":"formula_or_frameworks"};
   const safe=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
   const nl=s=>safe(s).replace(/\n/g,"<br>");
-  let modal=null;
+  let modal=null,marks=[],marksCourse=null,refreshTimer=null,loadingMarks=false;
   function ensureModal(){
     if(modal)return modal;
-    const style=document.createElement("style");
-    style.textContent=`
-    #coreDetailModal{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.55);display:flex;align-items:flex-end;justify-content:center;padding:12px}
-    #coreDetailModal.hidden{display:none!important}.core-detail-sheet{width:min(760px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:24px 24px 18px 18px;padding:20px;box-shadow:0 24px 80px rgba(15,23,42,.28)}
-    .core-detail-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;position:sticky;top:-20px;background:#fff;padding:4px 0 12px;z-index:2}
-    .core-detail-close{flex:0 0 auto;background:#f1f5f9;color:#0f172a;width:38px;height:38px;padding:0;border-radius:50%;font-size:20px}
-    .core-detail-answer{line-height:1.75;font-size:15px}.core-detail-sources{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
-    .core-detail-source{background:#eef2ff;color:#3730a3;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:800}
-    #sumBody .core-detail-item{cursor:pointer;border-radius:14px;padding:13px 10px;transition:.15s;background:linear-gradient(90deg,#fff,#fbfcff)}
-    #sumBody .core-detail-item:hover{background:#f8fafc}#sumBody .core-detail-item:active{transform:scale(.995)}
-    .core-detail-hint{font-size:10px;color:#6366f1;font-weight:850;margin-top:5px}.core-detail-loading{padding:28px 0;text-align:center;color:#64748b}
+    const style=document.createElement("style");style.textContent=`
+    #coreDetailModal{position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.55);display:flex;align-items:flex-end;justify-content:center;padding:12px}#coreDetailModal.hidden{display:none!important}
+    .core-detail-sheet{width:min(760px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:24px 24px 18px 18px;padding:20px;box-shadow:0 24px 80px rgba(15,23,42,.28)}
+    .core-detail-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;position:sticky;top:-20px;background:#fff;padding:4px 0 12px;z-index:2}.core-detail-close{flex:0 0 auto;background:#f1f5f9;color:#0f172a;width:38px;height:38px;padding:0;border-radius:50%;font-size:20px}
+    .core-detail-answer{line-height:1.75;font-size:15px}.core-detail-sources{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}.core-detail-source{background:#eef2ff;color:#3730a3;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:800}
+    #sumBody .core-detail-item{cursor:pointer;border-radius:14px;padding:13px 10px;transition:.15s;background:linear-gradient(90deg,#fff,#fbfcff)}#sumBody .core-detail-item:hover{background:#f8fafc}#sumBody .core-detail-item:active{transform:scale(.995)}
+    .core-detail-hint{font-size:10px;color:#6366f1;font-weight:850;margin-top:5px}.core-detail-loading{padding:28px 0;text-align:center;color:#64748b}.mark-row{display:flex;gap:7px;align-items:center;margin-top:8px;flex-wrap:wrap}.mark-toggle{padding:7px 10px;font-size:11px;background:#f1f5f9;color:#334155}.mark-toggle.marked{background:#fff7cc;color:#7c5d00}.mark-source{font-size:10px;color:#64748b}
+    .forest-marks{margin-top:14px;border:1px solid #e2e8f0;border-radius:17px;overflow:hidden;background:#fff}.forest-marks-head{display:flex;align-items:center;justify-content:space-between;padding:13px 14px;background:#fffdf2;cursor:pointer}.forest-marks-head b{font-size:14px}.forest-marks-list{padding:0 14px}.forest-mark{padding:12px 0;border-top:1px solid #eef2f7}.forest-mark-text{font-weight:750;line-height:1.45}.forest-mark-actions{display:flex;gap:6px;margin-top:7px}.forest-mark-actions button{font-size:10px;padding:6px 8px}.forest-marks-empty{padding:12px 0;color:#64748b;font-size:12px}
     @media(min-width:700px){#coreDetailModal{align-items:center}.core-detail-sheet{border-radius:24px}}`;
-    document.head.appendChild(style);
-    modal=document.createElement("div");modal.id="coreDetailModal";modal.className="hidden";
-    modal.innerHTML=`<div class="core-detail-sheet" role="dialog" aria-modal="true">
-      <div class="core-detail-head"><div><div class="mini" id="coreDetailCategory">시험 핵심 상세설명</div><h2 id="coreDetailTitle" style="margin-top:4px"></h2></div><button class="core-detail-close" aria-label="닫기">×</button></div>
-      <div id="coreDetailBody" class="core-detail-answer"></div><div id="coreDetailSources" class="core-detail-sources"></div></div>`;
-    document.body.appendChild(modal);
-    modal.querySelector(".core-detail-close").onclick=()=>modal.classList.add("hidden");
-    modal.addEventListener("click",e=>{if(e.target===modal)modal.classList.add("hidden")});
-    return modal;
+    document.head.appendChild(style);modal=document.createElement("div");modal.id="coreDetailModal";modal.className="hidden";modal.innerHTML=`<div class="core-detail-sheet" role="dialog" aria-modal="true"><div class="core-detail-head"><div><div class="mini" id="coreDetailCategory">시험 핵심 상세설명</div><h2 id="coreDetailTitle" style="margin-top:4px"></h2></div><button class="core-detail-close" aria-label="닫기">×</button></div><div id="coreDetailBody" class="core-detail-answer"></div><div id="coreDetailSources" class="core-detail-sources"></div></div>`;document.body.appendChild(modal);modal.querySelector(".core-detail-close").onclick=()=>modal.classList.add("hidden");modal.addEventListener("click",e=>{if(e.target===modal)modal.classList.add("hidden")});return modal;
   }
-  async function openDetail(category,index){
-    const m=ensureModal(),item=(typeof A!=="undefined"&&A&&A[category])?A[category][index]:null;
-    document.querySelector("#coreDetailCategory").textContent="시험 핵심 상세설명";
-    document.querySelector("#coreDetailTitle").textContent=item?.text||"상세설명";
-    document.querySelector("#coreDetailBody").innerHTML=`<div class="core-detail-loading">강의자료에서 근거를 찾아 상세설명 만드는 중…</div>`;
-    document.querySelector("#coreDetailSources").innerHTML="";m.classList.remove("hidden");
-    try{
-      const x=await jf(`/api/p/${PID}/courses/${CID}/core-detail`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({category,index})});
-      document.querySelector("#coreDetailCategory").textContent=x.category||"시험 핵심";
-      document.querySelector("#coreDetailTitle").textContent=x.title||item?.text||"상세설명";
-      document.querySelector("#coreDetailBody").innerHTML=nl(x.answer||"설명이 없어.");
-      document.querySelector("#coreDetailSources").innerHTML=(x.sources||[]).map(s=>`<span class="core-detail-source">${safe(s.doc)}${s.page?` · p.${s.page}`:""}</span>`).join("");
-    }catch(e){document.querySelector("#coreDetailBody").innerHTML=`<div class="notice">상세설명을 불러오지 못했어: ${safe(e.message||e)}</div>`}
+  async function openDetail(category,index){const m=ensureModal(),item=(typeof A!=="undefined"&&A&&A[category])?A[category][index]:null;document.querySelector("#coreDetailCategory").textContent="시험 핵심 상세설명";document.querySelector("#coreDetailTitle").textContent=item?.text||"상세설명";document.querySelector("#coreDetailBody").innerHTML=`<div class="core-detail-loading">강의자료에서 근거를 찾아 상세설명 만드는 중…</div>`;document.querySelector("#coreDetailSources").innerHTML="";m.classList.remove("hidden");try{const x=await jf(`/api/p/${PID}/courses/${CID}/core-detail`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({category,index})});document.querySelector("#coreDetailCategory").textContent=x.category||"시험 핵심";document.querySelector("#coreDetailTitle").textContent=x.title||item?.text||"상세설명";document.querySelector("#coreDetailBody").innerHTML=nl(x.answer||"설명이 없어.");document.querySelector("#coreDetailSources").innerHTML=(x.sources||[]).map(s=>`<span class="core-detail-source">${safe(s.doc)}${s.page?` · p.${s.page}`:""}</span>`).join("");}catch(e){document.querySelector("#coreDetailBody").innerHTML=`<div class="notice">상세설명을 불러오지 못했어: ${safe(e.message||e)}</div>`}}
+  function markFor(item,category,index){const locator=`core:${category}:${index}`;return marks.find(m=>m.locator===locator||(m.content===item?.text&&m.source_doc===(item?.source_doc||"")&&Number(m.page||0)===Number(item?.page||0)));}
+  async function loadMarks(force=false){if(!PID||!CID||loadingMarks)return;if(!force&&marksCourse===CID)return;const cid=CID;loadingMarks=true;try{const x=await jf(`/api/p/${PID}/courses/${cid}/marks`);if(CID!==cid)return;marks=x.marks||[];marksCourse=cid;enhance();renderMarksPanel();}catch(e){console.warn("marks",e)}finally{loadingMarks=false}}
+  async function toggleMark(item,category,index,button){const old=markFor(item,category,index);button.disabled=true;try{if(old)await jf(`/api/p/${PID}/courses/${CID}/marks/${old.id}`,{method:"DELETE"});else await jf(`/api/p/${PID}/courses/${CID}/marks`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content:item.text,source_type:"core",source_doc:item.source_doc||"",page:item.page||null,locator:`core:${category}:${index}`,category})});marksCourse=null;await loadMarks(true);}catch(e){alert(e.message)}finally{button.disabled=false}}
+  async function openMarkSource(mark){const doc=(COURSE?.documents||[]).find(d=>d.name===mark.source_doc);if(!doc)return alert("연결된 원본 자료를 찾지 못했어.");if(typeof openAnnotator!=="function")return alert("원본 필기 화면을 열 수 없어.");await openAnnotator(doc.id,doc.pages,doc.name);const page=Math.max(1,Number(mark.page)||1);if(typeof ANNO!=="undefined"&&ANNO&&page!==1){ANNO.page=Math.min(ANNO.pages,page);await loadAnnotationPage();}}
+  async function removeMark(id){try{await jf(`/api/p/${PID}/courses/${CID}/marks/${id}`,{method:"DELETE"});marksCourse=null;await loadMarks(true)}catch(e){alert(e.message)}}
+  function renderMarksPanel(){const root=document.querySelector("#dashBody");if(!root||!CID)return;let box=root.querySelector(".forest-marks");if(!box){box=document.createElement("div");box.className="forest-marks";root.prepend(box)}box.innerHTML=`<div class="forest-marks-head"><b>✍️ 내가 표시한 내용</b><span class="badge">${marks.length}</span></div><div class="forest-marks-list">${marks.length?marks.map(m=>`<div class="forest-mark" data-mark-id="${m.id}"><div class="forest-mark-text">${safe(m.content)}</div><div class="mark-source">${safe(m.source_doc||"직접 표시")}${m.page?` · p.${m.page}`:""}</div><div class="forest-mark-actions">${m.source_doc?`<button class="soft" data-mark-open="${m.id}">원본으로</button>`:""}<button class="ghost" data-mark-remove="${m.id}">표시 해제</button></div></div>`).join(""):`<div class="forest-marks-empty">시험 핵심에서 ‘표시’를 누르면 여기에 모여.</div>`}</div>`;box.onclick=e=>{const open=e.target.closest("[data-mark-open]"),remove=e.target.closest("[data-mark-remove]");if(open){e.stopPropagation();const m=marks.find(x=>x.id===+open.dataset.markOpen);if(m)openMarkSource(m)}else if(remove){e.stopPropagation();removeMark(+remove.dataset.markRemove)}};
   }
-  function enhance(){
-    const root=document.querySelector("#sumBody");if(!root)return;
-    let category=null;const counters={};
-    [...root.children].forEach(el=>{
-      if(el.tagName==="H3"){category=CATEGORY_BY_TITLE[(el.textContent||"").trim()]||null;if(category&&counters[category]==null)counters[category]=0;return}
-      if(!category||!el.classList.contains("item"))return;
-      const cat=category,idx=counters[cat]++;
-      if(el.dataset.coreDetailBound==="1")return;
-      el.dataset.coreDetailBound="1";el.classList.add("core-detail-item");
-      const hint=document.createElement("div");hint.className="core-detail-hint";hint.textContent="눌러서 상세설명 보기 ›";el.appendChild(hint);
-      el.addEventListener("click",()=>openDetail(cat,idx));
-    });
-  }
+  function enhance(){const root=document.querySelector("#sumBody");if(!root)return;let category=null;const counters={};[...root.children].forEach(el=>{if(el.tagName==="H3"){category=CATEGORY_BY_TITLE[(el.textContent||"").trim()]||null;if(category&&counters[category]==null)counters[category]=0;return}if(!category||!el.classList.contains("item"))return;const cat=category,idx=counters[cat]++,item=A?.[cat]?.[idx];el.classList.add("core-detail-item");if(el.dataset.coreDetailBound!=="1"){el.dataset.coreDetailBound="1";const hint=document.createElement("div");hint.className="core-detail-hint";hint.textContent="눌러서 상세설명 보기 ›";el.appendChild(hint);el.addEventListener("click",()=>openDetail(cat,idx));}let row=el.querySelector(".mark-row");if(!row){row=document.createElement("div");row.className="mark-row";el.appendChild(row)}const old=markFor(item,cat,idx);row.innerHTML=`<button class="mark-toggle ${old?'marked':''}">${old?'✓ 표시됨':'✍️ 표시'}</button><span class="mark-source">${safe(item?.source_doc||"")}${item?.page?` · p.${item.page}`:""}</span>`;row.querySelector("button").onclick=e=>{e.stopPropagation();if(item)toggleMark(item,cat,idx,e.currentTarget)};});if(marksCourse!==CID)loadMarks();renderMarksPanel();}
+  function schedule(){clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>{if(CID&&marksCourse!==CID)loadMarks();enhance();renderMarksPanel()},80)}
   window.addEventListener("keydown",e=>{if(e.key==="Escape"&&modal)modal.classList.add("hidden")});
-  function start(){ensureModal();const root=document.querySelector("#sumBody");if(root)new MutationObserver(enhance).observe(root,{childList:true,subtree:true});enhance();setInterval(enhance,1200)}
+  function start(){ensureModal();const sum=document.querySelector("#sumBody"),dash=document.querySelector("#dashBody");if(sum)new MutationObserver(schedule).observe(sum,{childList:true,subtree:true});if(dash)new MutationObserver(schedule).observe(dash,{childList:true,subtree:true});document.addEventListener("click",e=>{if(e.target.closest(".course")){marksCourse=null;marks=[];setTimeout(schedule,150)}});schedule();setInterval(()=>{if(CID&&marksCourse!==CID)schedule()},1000)}
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start);else start();
 })();
