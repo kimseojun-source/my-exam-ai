@@ -29,7 +29,7 @@ label{font-size:12px;font-weight:850;display:block;margin:10px 0 5px}.row{displa
 .notice{padding:10px 12px;border-radius:12px;background:#fffbeb;color:#92400e;font-size:12px;line-height:1.5}.ok{background:#ecfdf5;color:#065f46}.namespace{font-family:ui-monospace,monospace;font-size:10px;color:#64748b}.timer{font-variant-numeric:tabular-nums;font-weight:950;font-size:22px}
 .splash{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:#c7ff19;color:#090d08;overflow:hidden;animation:splashOut .38s ease 1.7s forwards}.splashWords{display:grid;gap:6px;text-align:center;font-weight:900;font-size:clamp(24px,6vw,56px);line-height:1}.splashWords span{opacity:0;transform:translateY(18px);animation:wordIn .3s ease forwards}.splashWords span:nth-child(2){animation-delay:.22s}.splashWords span:nth-child(3){animation-delay:.44s}.splashBrand{position:absolute;font-weight:1000;font-size:clamp(42px,12vw,104px);letter-spacing:-.06em;opacity:0;transform:scale(.88);animation:brandIn .45s cubic-bezier(.2,.8,.2,1) .88s forwards}.splashWords{animation:wordsAway .3s ease .82s forwards}@keyframes wordIn{to{opacity:1;transform:none}}@keyframes wordsAway{to{opacity:0;transform:scale(.92)}}@keyframes brandIn{to{opacity:1;transform:scale(1)}}@keyframes splashOut{to{opacity:0;visibility:hidden;pointer-events:none}}@media(prefers-reduced-motion:reduce){.splashWords{display:none}.splashBrand{opacity:1;transform:none;animation:none}.splash{animation:splashOut .15s linear .65s forwards}}
 </style>
-<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="FOR&#39;EST"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="format-detection" content="telephone=no"><link rel="stylesheet" href="/app.css?v=14"></head>
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="FOR&#39;EST"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="format-detection" content="telephone=no"><link rel="stylesheet" href="/app.css?v=15"></head>
 <body><div id="splash" class="splash" aria-label="FOR'EST 시작 화면"><div class="splashWords"><span>For your</span><span>Ever-Smarter</span><span>Tomorrow</span></div><div class="splashBrand">FOR&#39;EST</div></div><main class="shell">
 
 <section id="gate" class="gate">
@@ -102,7 +102,7 @@ label{font-size:12px;font-weight:850;display:block;margin:10px 0 5px}.row{displa
             <div id="recordingStatus" class="recorder-status" role="status" aria-live="polite">녹음 시작을 누르면 마이크 권한을 요청해.</div>
             <div id="liveTranscript" class="live-transcript" aria-live="polite"><span class="sub">실시간 자막이 여기에 표시돼.</span></div>
             <div id="lectureList" class="lecture-list"></div>
-            <pre id="lectureNote" class="lecture-note hidden"></pre>
+            <div id="lectureNote" class="lecture-note hidden"></div>
           </section>
         </div>
 
@@ -123,7 +123,7 @@ label{font-size:12px;font-weight:850;display:block;margin:10px 0 5px}.row{displa
           <div id="studyProgress" class="study-progress"></div>
           <details class="study-details"><summary>분석 결과와 학습계획</summary><div id="dashBody" class="sub">PDF를 넣고 자동 분석을 눌러줘.</div></details>
         </div>
-        <div id="sum" class="pane card hidden"><h2>시험 핵심</h2><div id="sumBody"></div></div>
+        <div id="sum" class="pane card hidden"><h2>시험 핵심</h2><p class="sub">각 핵심을 누르면 중요 이유와 근거를 보고, 원본 확인·AI 질문·집중 문제까지 바로 이어갈 수 있어.</p><div id="sumBody"></div></div>
         <div id="cards" class="pane card hidden"><h2>오늘 복습</h2><div id="cardBox"></div></div>
         <div id="quiz" class="pane card hidden">
           <div class="row"><div><h2>시험 생성</h2><div class="sub">적응형은 약점을, 실전모의는 전체 범위를 우선해.</div></div>
@@ -250,8 +250,8 @@ function render(){
   <div class="kpi"><span class="mini">유형</span><b style="font-size:14px">${esc(p.study_style||"—")}</b></div>`;
   if(!A.overview){$("#dashBody").innerHTML="<p>PDF를 넣고 <b>자동 분석</b>을 눌러줘.</p>";$("#sumBody").innerHTML="";$("#extBody").innerHTML="";$("#cardBox").innerHTML="<p class='sub'>자동 분석 후 생성돼.</p>";return}
   $("#dashBody").innerHTML=`<p>${esc(A.overview)}</p><h3>자료 상태</h3>${COURSE.documents.map(d=>`<div class="item"><b>${esc(d.name)}</b><div class="src">${d.type} · ${d.extraction} · ${d.pages}p · 이미지 ${d.images}</div></div>`).join("")}<h3 style="margin-top:16px">자동 학습계획</h3>${(A.study_plan||[]).map(x=>`<div class="item"><b>${esc(x.label)} · ${esc(x.goal)}</b><div class="src">${x.tasks.map(esc).join(" → ")}</div></div>`).join("")}`;
-  const gs=[["무조건 암기","must_memorize"],["이해 필수","must_understand"],["출제 핫스팟","exam_hotspots"],["헷갈리는 비교","confusing_pairs"],["공식·프레임워크","formula_or_frameworks"]];
-  $("#sumBody").innerHTML=gs.map(([t,k])=>`<h3 style="margin-top:16px">${t}</h3>${(A[k]||[]).map(x=>`<div class="item"><span class="badge ${esc(x.source_type)}">${x.source_type==="lecture"?"강의":"통합"}</span>${esc(x.text)}<div class="src">${esc(x.source_doc)} ${x.page?`p.${x.page}`:""}</div></div>`).join("")}`).join("");
+  const gs=[["무조건 암기","must_memorize","정의·용어처럼 정확히 외워야 답할 수 있는 내용"],["이해 필수","must_understand","원리와 인과관계를 자기 말로 설명해야 하는 내용"],["출제 핫스팟","exam_hotspots","자료에서 반복되거나 시험 질문으로 바꾸기 좋은 내용"],["헷갈리는 비교","confusing_pairs","비슷해 보여 오답이 나기 쉬운 차이점"],["공식·프레임워크","formula_or_frameworks","계산·서술 답안에 바로 적용할 구조"]];
+  $("#sumBody").innerHTML=gs.map(([t,k,d])=>`<h3 class="core-category" data-core-category="${k}">${t}<small>${d}</small></h3>${(A[k]||[]).map(x=>`<div class="item"><span class="badge ${esc(x.source_type)}">${x.source_type==="lecture"?"강의":"통합"}</span>${esc(x.text)}<div class="src">${esc(x.source_doc)} ${x.page?`p.${x.page}`:""}</div></div>`).join("")}`).join("");
   $("#extBody").innerHTML=(A.external_knowledge||[]).map(x=>`<div class="item"><span class="badge external">${x.source_type==="web"?"웹":"AI 지식"}</span><div class="q">${esc(x.title)}</div><p>${esc(x.text)}</p><div class="src">${esc(x.why)}</div></div>`).join("")||"<p class='sub'>별도 보충지식 없음.</p>";
   $("#chat").innerHTML=(COURSE.tutor_history||[]).map(m=>`<div class="bubble ${m.role==="user"?"me":"ai"}">${esc(m.content)}</div>`).join("");
   loadDue();renderPattern(COURSE.exam_pattern);
@@ -311,4 +311,4 @@ async function backup(){
 // Boot is owned by app.js so overrides and error handling are ready first.
 if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
 </script>
-<script src="/app.js?v=14"></script><script src="/detail.js?v=4"></script><script src="/install.js?v=1"></script></body></html>
+<script src="/app.js?v=15"></script><script src="/detail.js?v=5"></script><script src="/install.js?v=1"></script></body></html>

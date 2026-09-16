@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v15" in script
-    for asset in ["/app.css?v=14", "/app.js?v=14", "/detail.js?v=4", "/install.js?v=1"]:
+    assert "forest-shell-v16" in script
+    for asset in ["/app.css?v=15", "/app.js?v=15", "/detail.js?v=5", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -104,3 +104,19 @@ def test_course_resume_and_summary_ui_are_user_scoped():
     assert "course.last_score" in script
     assert "data-course-id" in script
     assert ".course-title" in styles
+
+
+def test_mobile_forms_core_actions_and_timecoded_transcript():
+    html = (ROOT / "static/index.html").read_text()
+    app = (ROOT / "static/app.js").read_text()
+    detail = (ROOT / "static/detail.js").read_text()
+    styles = (ROOT / "static/app.css").read_text()
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    assert '<div id="lectureNote"' in html
+    assert "data-transcript-lecture" in app
+    assert "data-seek-lecture" in app
+    assert "data-core-practice" in detail
+    assert "data-core-source" in detail
+    assert "data-core-ask" in detail
+    assert "@media(max-width:520px){.side{grid-template-columns:minmax(0,1fr)}" in styles
+    assert "uvicorn forest_app:app" in dockerfile

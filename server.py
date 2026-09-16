@@ -995,6 +995,31 @@ def core_detail(pid:int,cid:int,payload:dict):
         if len(sources)>=6:break
     return {"title":topic,"category":CORE_DETAIL_LABELS[category],"answer":answer,"sources":sources}
 
+@app.post("/api/p/{pid}/courses/{cid}/core-practice")
+def core_practice(pid:int,cid:int,payload:dict):
+    c=course_row(pid,cid);category=str(payload.get("category") or "")
+    if category not in CORE_DETAIL_LABELS:raise HTTPException(400,"연습할 시험핵심 유형을 찾지 못했어.")
+    try:index=int(payload.get("index",-1))
+    except:index=-1
+    analysis=json.loads(c["analysis_json"] or "{}");items=analysis.get(category) or []
+    if index<0 or index>=len(items):raise HTTPException(404,"해당 시험핵심 항목을 찾지 못했어.")
+    topic=str(items[index].get("text") or "").strip();docs=course_docs(pid,cid,["lecture","textbook","notes"])
+    if not docs:docs=course_docs(pid,cid)
+    related=retrieve(chunks_from_docs(docs),topic,k=16)
+    if not related:raise HTTPException(400,"이 핵심과 연결된 자료 근거를 찾지 못했어.")
+    material="\n\n".join(f"[{x['doc']} p.{x['page']}]\n{x['text']}" for x in related)
+    prompt=f"""현재 과목 '{c['name']}'의 다음 시험핵심 하나만 확실히 이해했는지 확인하는 문제를 정확히 3개 만든다.
+시험핵심: {topic}
+유형: {CORE_DETAIL_LABELS[category]}
+객관식 또는 OX 2개와 짧은 서술형 1개를 만들고, 단순 문장 복사 대신 뜻·비교·적용을 확인한다.
+각 문제의 정답과 해설은 아래 현재 과목 자료로만 판단하며 실제 source_doc/page를 넣는다.
+자료:
+{material[:70000]}"""
+    result=json_call(prompt,QUESTION_SCHEMA);questions=(result or {}).get("questions",[])[:3]
+    fallbacks=[{"type":"true_false","question":f"다음 내용이 자료의 핵심과 일치하는가? {x['text'][:180]}","choices":["O","X"],"answer":"O","explanation":f"{x['doc']} p.{x['page']} 근거","tags":[CORE_DETAIL_LABELS[category]],"source_doc":x["doc"],"page":x["page"],"source_type":"lecture","difficulty":"medium"} for x in [related[i%len(related)] for i in range(3)]]
+    questions=(questions+fallbacks[len(questions):])[:3];result={"questions":questions}
+    result["focus"]={"title":topic,"category":CORE_DETAIL_LABELS[category]};return result
+
 DETAIL_JS=r"""
 (function(){
   const CATEGORY_BY_TITLE={

@@ -106,6 +106,15 @@ def test_course_list_exposes_resume_summary_without_cross_profile_data():
  assert c.get('/api/p/1/courses').status_code==403
  assert c.get(f'/api/p/{guest}/courses').json()==[]
 
+def test_exam_core_creates_focused_three_question_practice():
+ c=TestClient(server.app);cid=setup_course(c,'Core Practice');base=f'/api/p/1/courses/{cid}'
+ c.post(base+'/documents',files={'files':('core.pdf',pdf_bytes(),'application/pdf')})
+ analysis=c.post(base+'/analyze').json();category=next(k for k in server.CORE_DETAIL_LABELS if analysis.get(k))
+ result=c.post(base+'/core-practice',json={'category':category,'index':0})
+ assert result.status_code==200,result.text
+ data=result.json();assert len(data['questions'])==3 and data['focus']['category']==server.CORE_DETAIL_LABELS[category]
+ assert all(q['source_doc']=='core.pdf' for q in data['questions'])
+
 def test_vision_request_schema_and_rotation(monkeypatch):
  class Responses:
   def create(self,**kwargs):
