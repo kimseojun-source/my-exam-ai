@@ -658,7 +658,15 @@ def clean_annotation_items(items):
             if point_count>50000:raise HTTPException(400,"한 페이지의 펜 선이 너무 많아.")
             width=item.get("width",4)
             if isinstance(width,bool) or not isinstance(width,(int,float)) or not 1<=width<=30:raise HTTPException(400,"펜 굵기가 올바르지 않아.")
-            clean.append({"type":"stroke","color":color,"width":round(float(width),2),"points":[[unit(p[0]),unit(p[1])] for p in points if isinstance(p,list) and len(p)==2]})
+            stroke={"type":"stroke","color":color,"width":round(float(width),2),"points":[[unit(p[0]),unit(p[1])] for p in points if isinstance(p,list) and len(p)==2]}
+            # Keep highlighter transparency across save/reload while remaining
+            # compatible with older pen strokes that have no opacity field.
+            if "opacity" in item:
+                opacity=item["opacity"]
+                if isinstance(opacity,bool) or not isinstance(opacity,(int,float)) or not math.isfinite(opacity) or not .05<=opacity<=1:
+                    raise HTTPException(400,"펜 투명도가 올바르지 않아.")
+                stroke["opacity"]=round(float(opacity),2)
+            clean.append(stroke)
             if not clean[-1]["points"]:raise HTTPException(400,"펜 선 좌표가 올바르지 않아.")
         elif item.get("type")=="text":
             value=item.get("text","")

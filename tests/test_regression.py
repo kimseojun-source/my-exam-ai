@@ -43,13 +43,14 @@ def test_document_preview_annotations_and_original_preserved():
  original=pdf_bytes();r=c.post(base+'/documents',files={'files':('write-on.pdf',original,'application/pdf')});did=r.json()['added'][0]['id']
  preview=c.get(base+f'/documents/{did}/preview?page=1')
  assert preview.status_code==200 and preview.headers['content-type']=='image/png' and preview.content.startswith(b'\x89PNG')
- items=[{'type':'stroke','color':'#ff0000','width':5,'points':[[.1,.2],[.4,.5]]},{'type':'text','color':'#17231e','size':24,'x':.2,'y':.3,'text':'중요'}]
+ items=[{'type':'stroke','color':'#d6ff00','width':12,'opacity':.35,'points':[[.1,.2],[.4,.5]]},{'type':'text','color':'#17231e','size':24,'x':.2,'y':.3,'text':'중요'}]
  saved=c.put(base+f'/documents/{did}/annotations?page=1',json={'items':items})
  assert saved.status_code==200 and saved.json()['count']==2
  assert c.get(base+f'/documents/{did}/annotations?page=1').json()['items']==items
  assert c.get(base+f'/documents/{did}/file').content==original
  assert c.get(base+f'/documents/{did}/preview?page=2').status_code==400
  assert c.put(base+f'/documents/{did}/annotations?page=1',json={'items':[{'type':'text','color':'bad','size':24,'x':0,'y':0,'text':'x'}]}).status_code==400
+ assert c.put(base+f'/documents/{did}/annotations?page=1',json={'items':[{'type':'stroke','color':'#d6ff00','width':12,'opacity':0,'points':[[.1,.2]]}]}).status_code==400
  other=setup_course(c,'Other')
  assert c.get(f'/api/p/1/courses/{other}/documents/{did}/annotations?page=1').status_code==404
 
