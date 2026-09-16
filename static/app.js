@@ -1,136 +1,37 @@
 // Preserve the existing API, session cookie and local-storage keys.
 let viewEpoch=0,profilesById=new Map();
 const originalJf=jf;
-jf=async function(url,opt={}){
-  const match=url.match(/^\/api\/p\/(\d+)(?:\/courses\/(\d+))?/);
-  const result=await originalJf(url,opt);
-  if(match && (Number(match[1])!==PID || (match[2] && Number(match[2])!==CID)))
-    throw Error('과목이 전환되어 이전 요청의 화면 갱신을 중단했어. 결과는 원래 과목에 보관돼.');
-  return result;
-};
-loadProfiles=async function(){
-  const ps=await jf('/api/profiles');profilesById=new Map(ps.map(p=>[p.id,p]));
-  $('#profiles').innerHTML=ps.map(p=>`<button class="profile" data-profile-id="${p.id}"><div class="avatar">${esc((p.name||'U')[0])}</div><b>${esc(p.name)}</b><div class="mini">${p.is_owner?'소유자':'사용자'} · ${p.has_pin?'PIN 보호':'PIN 미설정'}</div></button>`).join('');
-  $('#guestAdmin').classList.toggle('hidden',!PROFILE?.is_owner || ps.length>=2);
-};
+jf=async function(url,opt={}){const match=url.match(/^\/api\/p\/(\d+)(?:\/courses\/(\d+))?/);const result=await originalJf(url,opt);if(match&&(Number(match[1])!==PID||(match[2]&&Number(match[2])!==CID)))throw Error('과목이 전환되어 이전 요청의 화면 갱신을 중단했어. 결과는 원래 과목에 보관돼.');return result;};
+loadProfiles=async function(){const ps=await jf('/api/profiles');profilesById=new Map(ps.map(p=>[p.id,p]));$('#profiles').innerHTML=ps.map(p=>`<button class="profile" data-profile-id="${p.id}"><div class="avatar">${esc((p.name||'U')[0])}</div><b>${esc(p.name)}</b><div class="mini">${p.is_owner?'소유자':'사용자'} · ${p.has_pin?'PIN 보호':'PIN 미설정'}</div></button>`).join('');$('#guestAdmin').classList.toggle('hidden',!PROFILE?.is_owner||ps.length>=2);};
 $('#profiles').addEventListener('click',e=>{const b=e.target.closest('[data-profile-id]');if(b)enterProfile(profilesById.get(+b.dataset.profileId));});
-function resetCourseView(){
-  QUIZ=null;CARDS=[];CI=0;CB=false;COURSE=null;A={};
-  for(const id of ['chat','ask','quizBody','sumBody','extBody','patternBody','cardBox','documentList','uploadStatus']){const el=$('#'+id);if(el.tagName==='TEXTAREA')el.value='';else el.innerHTML='';}
-  $('#files').value='';$('#coreDetailModal')?.classList.add('hidden');
-  pane('dash',document.querySelector('.tab'));
-}
-openCourse=async function(id){
-  const epoch=++viewEpoch;CID=id;resetCourseView();$('#ws').classList.add('hidden');
-  try{
-    const course=await jf(`/api/p/${PID}/courses/${id}`);
-    if(epoch!==viewEpoch || CID!==id)return;
-    COURSE=course;A=course.analysis||{};$('#empty').classList.add('hidden');$('#ws').classList.remove('hidden');$('#ctitle').textContent=course.name;render();await loadCourses();
-    sessionStorage.setItem(`forest_course_${PID}`,String(id));
-  }catch(e){if(epoch===viewEpoch)alert(e.message);}
-};
-const originalSwitch=switchProfile;
-switchProfile=async function(){++viewEpoch;resetCourseView();await originalSwitch();};
-const originalShow=showApp;
-showApp=function(){originalShow();$('#guestAdmin').classList.toggle('hidden',!PROFILE.is_owner || profilesById.size>=2);};
-const originalRender=render;
-render=function(){
-  // Clear stale history even for a course without analysis; tutor works independently.
-  $('#chat').innerHTML=(COURSE.tutor_history||[]).map(m=>`<div class="bubble ${m.role==='user'?'me':'ai'}">${esc(m.content)}</div>`).join('');
-  renderPattern(COURSE.exam_pattern);originalRender();
-  $('#documentList').innerHTML=COURSE.documents.map(d=>`<div class="document"><b>${esc(d.name)}</b><div class="src">${d.pages}p · ${d.extraction==='pending_vision'?'원본 보관 · AI 읽기 대기':esc(d.extraction)}</div><div class="row"><button class="primary" data-annotate="${d.id}" data-pages="${d.pages}" data-name="${esc(d.name)}">필기하기</button><button class="ghost" data-download="${d.id}">원본 받기</button><button class="soft" data-reprocess="${d.id}">다시 읽기</button></div></div>`).join('');
-};
-async function busy(button,action){
-  if(button?.disabled)return;const text=button?.textContent;
-  if(button){button.disabled=true;button.textContent='처리 중…';}
-  try{return await action();}catch(e){alert(e.message);}finally{if(button){button.disabled=false;button.textContent=text;}}
-}
-$('#documentList').addEventListener('click',e=>{
-  const b=e.target.closest('button');if(!b)return;
-  const base=`/api/p/${PID}/courses/${CID}/documents/`;
-  if(b.dataset.annotate)return openAnnotator(+b.dataset.annotate,+b.dataset.pages,b.dataset.name);
-  busy(b,async()=>{
-    if(b.dataset.download)await downloadFile(base+b.dataset.download+'/file');
-    else {await jf(base+b.dataset.reprocess+'/reprocess',{method:'POST'});await openCourse(CID);}
-  });
-});
+function resetCourseView(){QUIZ=null;CARDS=[];CI=0;CB=false;COURSE=null;A={};for(const id of ['chat','ask','quizBody','sumBody','extBody','patternBody','cardBox','documentList','uploadStatus']){const el=$('#'+id);if(el.tagName==='TEXTAREA')el.value='';else el.innerHTML='';}$('#files').value='';$('#coreDetailModal')?.classList.add('hidden');pane('dash',document.querySelector('.tab'));}
+openCourse=async function(id){const epoch=++viewEpoch;CID=id;resetCourseView();$('#ws').classList.add('hidden');try{const course=await jf(`/api/p/${PID}/courses/${id}`);if(epoch!==viewEpoch||CID!==id)return;COURSE=course;A=course.analysis||{};$('#empty').classList.add('hidden');$('#ws').classList.remove('hidden');$('#ctitle').textContent=course.name;render();await loadCourses();sessionStorage.setItem(`forest_course_${PID}`,String(id));}catch(e){if(epoch===viewEpoch)alert(e.message);}};
+const originalSwitch=switchProfile;switchProfile=async function(){++viewEpoch;resetCourseView();await originalSwitch();};const originalShow=showApp;showApp=function(){originalShow();$('#guestAdmin').classList.toggle('hidden',!PROFILE.is_owner||profilesById.size>=2);};const originalRender=render;
+render=function(){$('#chat').innerHTML=(COURSE.tutor_history||[]).map(m=>`<div class="bubble ${m.role==='user'?'me':'ai'}">${esc(m.content)}</div>`).join('');renderPattern(COURSE.exam_pattern);originalRender();$('#documentList').innerHTML=COURSE.documents.map(d=>`<div class="document"><b>${esc(d.name)}</b><div class="src">${d.pages}p · ${d.extraction==='pending_vision'?'원본 보관 · AI 읽기 대기':esc(d.extraction)}</div><div class="row"><button class="primary" data-annotate="${d.id}" data-pages="${d.pages}">필기하기</button><button class="ghost" data-download="${d.id}">원본 받기</button><button class="soft" data-reprocess="${d.id}">다시 읽기</button></div></div>`).join('');};
+async function busy(button,action){if(button?.disabled)return;const text=button?.textContent;if(button){button.disabled=true;button.textContent='처리 중…';}try{return await action();}catch(e){alert(e.message);}finally{if(button){button.disabled=false;button.textContent=text;}}}
+$('#documentList').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const base=`/api/p/${PID}/courses/${CID}/documents/`,doc=(COURSE?.documents||[]).find(d=>d.id===+(b.dataset.annotate||b.dataset.download||b.dataset.reprocess));if(b.dataset.annotate)return openAnnotator(doc.id,doc.pages,doc.name);busy(b,async()=>{if(b.dataset.download)await downloadFile(base+b.dataset.download+'/file',doc?.name);else{await jf(base+b.dataset.reprocess+'/reprocess',{method:'POST'});await openCourse(CID);}});});
 
 let ANNO=null;
-function annotationMarkup(name){return `<div class="annotation-backdrop" role="dialog" aria-modal="true" aria-label="${esc(name)} 필기"><div class="annotation-sheet"><header><div><b>${esc(name)}</b><span id="annoPage"></span></div><button class="ghost" data-anno-close>닫기</button></header><div class="annotation-toolbar"><button class="active" data-anno-tool="pen">펜</button><button data-anno-tool="text">텍스트</button><label>색상 <input id="annoColor" type="color" value="#17231e"></label><label>크기 <input id="annoSize" type="range" min="1" max="30" value="4"></label><input id="annoText" class="hidden" maxlength="500" placeholder="텍스트 입력 후 자료를 눌러 배치"><button class="ghost" data-anno-undo>실행 취소</button><button class="ghost" data-anno-clear>페이지 지우기</button></div><main class="annotation-stage"><div class="annotation-paper"><img id="annoImage" alt="필기할 자료 페이지"><canvas id="annoCanvas"></canvas><div id="annoLoading">페이지 불러오는 중…</div></div></main><footer><button class="ghost" data-anno-prev>이전</button><span id="annoStatus" aria-live="polite">원본과 분리 저장돼</span><button class="ghost" data-anno-next>다음</button><button class="primary" data-anno-save>저장</button></footer></div></div>`;}
-async function openAnnotator(did,pages,name){
-  closeAnnotator();document.body.insertAdjacentHTML('beforeend',annotationMarkup(name));document.body.classList.add('annotating');
-  ANNO={did,pages:Math.max(1,pages||1),page:1,items:[],dirty:false,tool:'pen',drawing:null,pid:PID,cid:CID};
-  const root=document.querySelector('.annotation-backdrop'),canvas=$('#annoCanvas');
-  root.addEventListener('click',annotationClick);canvas.addEventListener('pointerdown',annotationDown);canvas.addEventListener('pointermove',annotationMove);canvas.addEventListener('pointerup',annotationUp);canvas.addEventListener('pointercancel',annotationUp);
-  $('#annoImage').addEventListener('load',()=>{resizeAnnotationCanvas();$('#annoLoading').classList.add('hidden');});
-  ANNO.observer=new ResizeObserver(resizeAnnotationCanvas);ANNO.observer.observe(root.querySelector('.annotation-paper'));
-  await loadAnnotationPage();
-}
+function annotationMarkup(name){return `<div class="annotation-backdrop" role="dialog" aria-modal="true" aria-label="${esc(name)} 필기"><div class="annotation-sheet"><header><div><b>${esc(name)}</b><span id="annoPage"></span></div><button class="ghost" data-anno-close>닫기</button></header><div class="annotation-toolbar"><button class="active" data-anno-tool="pen">펜</button><button data-anno-tool="highlighter">형광펜</button><button data-anno-tool="eraser">지우개</button><button data-anno-tool="text">텍스트</button><label>색상 <input id="annoColor" type="color" value="#17231e"></label><label>크기 <input id="annoSize" type="range" min="1" max="30" value="4"></label><input id="annoText" class="hidden" maxlength="500" placeholder="텍스트 입력 후 자료를 눌러 배치"><button class="ghost" data-anno-undo>실행 취소</button><button class="ghost" data-anno-clear>페이지 지우기</button></div><main class="annotation-stage"><div class="annotation-paper"><img id="annoImage" alt="필기할 자료 페이지"><canvas id="annoCanvas"></canvas><div id="annoLoading">페이지 불러오는 중…</div></div></main><footer><button class="ghost" data-anno-prev>이전</button><span id="annoStatus" aria-live="polite">원본과 분리 저장돼</span><button class="ghost" data-anno-next>다음</button><button class="primary" data-anno-save>저장</button></footer></div></div>`;}
+async function openAnnotator(did,pages,name,startPage=1){closeAnnotator();document.body.insertAdjacentHTML('beforeend',annotationMarkup(name));document.body.classList.add('annotating');ANNO={did,pages:Math.max(1,pages||1),page:Math.max(1,Math.min(Math.max(1,pages||1),+startPage||1)),items:[],dirty:false,tool:'pen',drawing:null,pid:PID,cid:CID};const root=document.querySelector('.annotation-backdrop'),canvas=$('#annoCanvas');root.addEventListener('click',annotationClick);canvas.addEventListener('pointerdown',annotationDown);canvas.addEventListener('pointermove',annotationMove);canvas.addEventListener('pointerup',annotationUp);canvas.addEventListener('pointercancel',annotationUp);$('#annoImage').addEventListener('load',()=>{resizeAnnotationCanvas();$('#annoLoading').classList.add('hidden');});ANNO.observer=new ResizeObserver(resizeAnnotationCanvas);ANNO.observer.observe(root.querySelector('.annotation-paper'));await loadAnnotationPage();}
 function closeAnnotator(){if(!ANNO)return;ANNO.observer?.disconnect();if(ANNO.imageUrl)URL.revokeObjectURL(ANNO.imageUrl);document.querySelector('.annotation-backdrop')?.remove();document.body.classList.remove('annotating');ANNO=null;}
 function annotationBase(){return `/api/p/${ANNO.pid}/courses/${ANNO.cid}/documents/${ANNO.did}`;}
-async function loadAnnotationPage(){
-  const a=ANNO;if(!a)return;$('#annoLoading').classList.remove('hidden');$('#annoPage').textContent=` ${a.page} / ${a.pages}페이지`;$('#annoStatus').textContent='필기 불러오는 중…';
-  try{const [x,preview]=await Promise.all([jf(`${annotationBase()}/annotations?page=${a.page}`),fetch(`${annotationBase()}/preview?page=${a.page}`,{headers:ACCESS?{'X-App-Code':ACCESS}:{}})]);if(!preview.ok)throw Error('자료 페이지를 불러오지 못했어.');const url=URL.createObjectURL(await preview.blob());if(ANNO!==a){URL.revokeObjectURL(url);return;}if(a.imageUrl)URL.revokeObjectURL(a.imageUrl);a.imageUrl=url;$('#annoImage').src=url;a.items=x.items||[];a.dirty=false;drawAnnotations();$('#annoStatus').textContent='원본과 분리 저장돼';}
-  catch(e){$('#annoStatus').textContent=e.message;}
-  document.querySelector('[data-anno-prev]').disabled=a.page<=1;document.querySelector('[data-anno-next]').disabled=a.page>=a.pages;
-}
+async function loadAnnotationPage(){const a=ANNO;if(!a)return;$('#annoLoading').classList.remove('hidden');$('#annoPage').textContent=` ${a.page} / ${a.pages}페이지`;$('#annoStatus').textContent='필기 불러오는 중…';try{const [x,preview]=await Promise.all([jf(`${annotationBase()}/annotations?page=${a.page}`),fetch(`${annotationBase()}/preview?page=${a.page}`,{headers:ACCESS?{'X-App-Code':ACCESS}:{}})]);if(!preview.ok)throw Error('자료 페이지를 불러오지 못했어.');const url=URL.createObjectURL(await preview.blob());if(ANNO!==a){URL.revokeObjectURL(url);return;}if(a.imageUrl)URL.revokeObjectURL(a.imageUrl);a.imageUrl=url;$('#annoImage').src=url;a.items=x.items||[];a.dirty=false;drawAnnotations();$('#annoStatus').textContent='원본과 분리 저장돼';}catch(e){$('#annoStatus').textContent=e.message;}document.querySelector('[data-anno-prev]').disabled=a.page<=1;document.querySelector('[data-anno-next]').disabled=a.page>=a.pages;}
 function resizeAnnotationCanvas(){if(!ANNO)return;const img=$('#annoImage'),c=$('#annoCanvas');if(!img?.naturalWidth)return;const rect=img.getBoundingClientRect(),ratio=devicePixelRatio||1;c.width=Math.max(1,Math.round(rect.width*ratio));c.height=Math.max(1,Math.round(rect.height*ratio));c.style.width=`${rect.width}px`;c.style.height=`${rect.height}px`;drawAnnotations();}
-function drawAnnotations(){if(!ANNO)return;const c=$('#annoCanvas'),ctx=c.getContext('2d'),w=c.width,h=c.height,scale=devicePixelRatio||1;ctx.clearRect(0,0,w,h);ctx.lineCap='round';ctx.lineJoin='round';for(const x of ANNO.items){ctx.fillStyle=ctx.strokeStyle=x.color;if(x.type==='stroke'){ctx.lineWidth=x.width*scale;ctx.beginPath();x.points.forEach((p,i)=>(i?ctx.lineTo(p[0]*w,p[1]*h):ctx.moveTo(p[0]*w,p[1]*h)));ctx.stroke();}else{ctx.font=`${x.size*scale}px system-ui,sans-serif`;ctx.textBaseline='top';ctx.fillText(x.text,x.x*w,x.y*h);}}}
+function drawAnnotations(){if(!ANNO)return;const c=$('#annoCanvas'),ctx=c.getContext('2d'),w=c.width,h=c.height,scale=devicePixelRatio||1;ctx.clearRect(0,0,w,h);ctx.lineCap='round';ctx.lineJoin='round';for(const x of ANNO.items){ctx.save();ctx.fillStyle=ctx.strokeStyle=x.color;if(x.type==='stroke'){ctx.globalAlpha=x.opacity==null?1:x.opacity;ctx.lineWidth=x.width*scale;ctx.beginPath();x.points.forEach((p,i)=>(i?ctx.lineTo(p[0]*w,p[1]*h):ctx.moveTo(p[0]*w,p[1]*h)));ctx.stroke();}else{ctx.font=`${x.size*scale}px system-ui,sans-serif`;ctx.textBaseline='top';ctx.fillText(x.text,x.x*w,x.y*h);}ctx.restore();}}
 function annotationPoint(e){const r=$('#annoCanvas').getBoundingClientRect();return [Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))];}
-function annotationDown(e){if(!ANNO)return;e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);const p=annotationPoint(e);if(ANNO.tool==='text'){const text=$('#annoText').value.trim();if(!text)return $('#annoStatus').textContent='먼저 텍스트를 입력해줘.';ANNO.items.push({type:'text',color:$('#annoColor').value,size:Math.max(14,+$('#annoSize').value*2.5),x:p[0],y:p[1],text});ANNO.dirty=true;drawAnnotations();return;}ANNO.drawing={type:'stroke',color:$('#annoColor').value,width:+$('#annoSize').value,points:[p]};ANNO.items.push(ANNO.drawing);ANNO.dirty=true;}
-function annotationMove(e){if(!ANNO?.drawing)return;e.preventDefault();ANNO.drawing.points.push(annotationPoint(e));drawAnnotations();}
+function pointDistance(a,b){const dx=a[0]-b[0],dy=a[1]-b[1];return Math.sqrt(dx*dx+dy*dy);}
+function eraseAt(p){const before=ANNO.items.length;ANNO.items=ANNO.items.filter(x=>{if(x.type==='text')return pointDistance(p,[x.x,x.y])>.045;return !x.points?.some(q=>pointDistance(p,q)<.025);});if(ANNO.items.length!==before){ANNO.dirty=true;drawAnnotations();}}
+function annotationDown(e){if(!ANNO)return;e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);const p=annotationPoint(e);if(ANNO.tool==='eraser'){ANNO.drawing={type:'eraser'};eraseAt(p);return;}if(ANNO.tool==='text'){const text=$('#annoText').value.trim();if(!text)return $('#annoStatus').textContent='먼저 텍스트를 입력해줘.';ANNO.items.push({type:'text',color:$('#annoColor').value,size:Math.max(14,+$('#annoSize').value*2.5),x:p[0],y:p[1],text});ANNO.dirty=true;drawAnnotations();return;}const pressure=e.pointerType==='pen'&&e.pressure>0?Math.max(.55,Math.min(1.6,e.pressure*1.8)):1,high=ANNO.tool==='highlighter';ANNO.drawing={type:'stroke',color:high?'#d6ff00':$('#annoColor').value,width:Math.min(30,+$('#annoSize').value*(high?3:pressure)),opacity:high?.35:1,points:[p]};ANNO.items.push(ANNO.drawing);ANNO.dirty=true;}
+function annotationMove(e){if(!ANNO?.drawing)return;e.preventDefault();const p=annotationPoint(e);if(ANNO.drawing.type==='eraser')eraseAt(p);else{const pts=ANNO.drawing.points;if(!pts.length||pointDistance(pts[pts.length-1],p)>.0012)pts.push(p);drawAnnotations();}}
 function annotationUp(){if(ANNO)ANNO.drawing=null;}
-async function saveAnnotations(){if(!ANNO)return;const a=ANNO;$('#annoStatus').textContent='저장 중…';await jf(`${annotationBase()}/annotations?page=${a.page}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:a.items})});if(ANNO===a){a.dirty=false;$('#annoStatus').textContent='저장 완료';}}
-async function changeAnnotationPage(delta){if(!ANNO)return;try{if(ANNO.dirty)await saveAnnotations();ANNO.page+=delta;await loadAnnotationPage();}catch(e){$('#annoStatus').textContent=e.message;}}
-function annotationClick(e){const b=e.target.closest('button');if(!b||!ANNO)return;if(b.dataset.annoClose!==undefined){if(!ANNO.dirty||confirm('저장하지 않은 필기를 닫을까?'))closeAnnotator();}else if(b.dataset.annoTool){ANNO.tool=b.dataset.annoTool;document.querySelectorAll('[data-anno-tool]').forEach(x=>x.classList.toggle('active',x===b));$('#annoText').classList.toggle('hidden',ANNO.tool!=='text');}else if(b.dataset.annoUndo!==undefined){ANNO.items.pop();ANNO.dirty=true;drawAnnotations();}else if(b.dataset.annoClear!==undefined&&confirm('이 페이지의 필기를 모두 지울까?')){ANNO.items=[];ANNO.dirty=true;drawAnnotations();}else if(b.dataset.annoPrev!==undefined)changeAnnotationPage(-1);else if(b.dataset.annoNext!==undefined)changeAnnotationPage(1);else if(b.dataset.annoSave!==undefined)saveAnnotations().catch(x=>$('#annoStatus').textContent=x.message);}
-async function downloadFile(url,name){
-  // Normal authenticated navigation also works with Android's DownloadListener.
-  if(!ACCESS){const a=document.createElement('a');a.href=url;if(name)a.download=name;document.body.appendChild(a);a.click();a.remove();return;}
-  const r=await fetch(url,{headers:{'X-App-Code':ACCESS}});if(!r.ok)throw Error('파일 다운로드에 실패했어.');
-  const blob=await r.blob();const href=URL.createObjectURL(blob),a=document.createElement('a');a.href=href;a.download=name||'FOR-EST-document';a.click();setTimeout(()=>URL.revokeObjectURL(href),30000);
-}
+async function saveAnnotations(){if(!ANNO)return;const a=ANNO;$('#annoStatus').textContent='저장 중…';await jf(`${annotationBase()}/annotations?page=${a.page}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:a.items})});if(ANNO===a){a.dirty=false;$('#annoStatus').textContent='저장 완료';window.dispatchEvent(new CustomEvent('forest:marks-changed'));}}
+async function changeAnnotationPage(delta){if(!ANNO)return;try{if(ANNO.dirty)await saveAnnotations();ANNO.page=Math.max(1,Math.min(ANNO.pages,ANNO.page+delta));await loadAnnotationPage();}catch(e){$('#annoStatus').textContent=e.message;}}
+function annotationClick(e){const b=e.target.closest('button');if(!b||!ANNO)return;if(b.dataset.annoClose!==undefined){if(!ANNO.dirty||confirm('저장하지 않은 필기를 닫을까?'))closeAnnotator();}else if(b.dataset.annoTool){ANNO.tool=b.dataset.annoTool;document.querySelectorAll('[data-anno-tool]').forEach(x=>x.classList.toggle('active',x===b));$('#annoText').classList.toggle('hidden',ANNO.tool!=='text');$('#annoCanvas').classList.toggle('eraser',ANNO.tool==='eraser');}else if(b.dataset.annoUndo!==undefined){ANNO.items.pop();ANNO.dirty=true;drawAnnotations();}else if(b.dataset.annoClear!==undefined&&confirm('이 페이지의 필기를 모두 지울까?')){ANNO.items=[];ANNO.dirty=true;drawAnnotations();}else if(b.dataset.annoPrev!==undefined)changeAnnotationPage(-1);else if(b.dataset.annoNext!==undefined)changeAnnotationPage(1);else if(b.dataset.annoSave!==undefined)saveAnnotations().catch(x=>$('#annoStatus').textContent=x.message);}
+async function downloadFile(url,name){if(!ACCESS){const a=document.createElement('a');a.href=url;if(name)a.download=name;document.body.appendChild(a);a.click();a.remove();return;}const r=await fetch(url,{headers:{'X-App-Code':ACCESS}});if(!r.ok)throw Error('파일 다운로드에 실패했어.');const blob=await r.blob(),href=URL.createObjectURL(blob),a=document.createElement('a');a.href=href;a.download=name||'FOR-EST-document';a.click();setTimeout(()=>URL.revokeObjectURL(href),30000);}
 backup=async function(){try{await downloadFile(`/api/p/${PID}/backup`,`FOR-EST-${PROFILE.name}-backup.json`);}catch(e){alert(e.message);}};
-uploadDocs=async function(){
-  const files=[...$('#files').files],pid=PID,cid=CID;
-  if(!files.length)return alert('PDF 또는 이미지를 골라줘.');
-  if(files.length>15)return alert('한 번에 15개까지 올릴 수 있어.');
-  if(files.some(f=>f.size>40*1024*1024))return alert('파일당 40MB까지 올릴 수 있어.');
-  const fd=new FormData();files.forEach(f=>fd.append('files',f));fd.append('document_type',$('#dtype').value);
-  const button=document.querySelector('[onclick="uploadDocs()"]');
-  await busy(button,async()=>{
-    $('#uploadStatus').textContent='자료를 업로드하고 읽는 중이야. 이미지·스캔 PDF는 시간이 조금 걸릴 수 있어.';
-    try{
-      const x=await jf(`/api/p/${pid}/courses/${cid}/documents`,{method:'POST',body:fd});
-      if(PID!==pid||CID!==cid)return;
-      const messages=[...x.added.map(d=>`${d.name}: ${d.warning||'추가 완료'}`),...(x.skipped||[]).map(d=>`${d.name}: 이미 보관된 자료`),...(x.errors||[]).map(d=>`${d.name}: ${d.message}`)];
-      await openCourse(cid);$('#uploadStatus').textContent=messages.join('\n');
-    }catch(e){if(PID===pid&&CID===cid)$('#uploadStatus').textContent=e.message;throw e;}
-  });
-};
-// Keep all long operations bound to the course that started them.
-for(const name of ['analyze','makeQuiz','analyzePattern','gradeQuiz','askTutor']){
-  const original=window[name];
-  window[name]=async function(){const b=document.querySelector(`[onclick="${name}()"]`);return busy(b,()=>original());};
-}
-askTutor=async function(){
-  const q=$('#ask').value.trim(),pid=PID,cid=CID;if(!q)return;
-  const button=document.querySelector('[onclick="askTutor()"]');
-  await busy(button,async()=>{
-    $('#chat').innerHTML+=`<div class="bubble me">${esc(q)}</div><div class="bubble ai" id="thinking">현재 과목 자료에서 근거를 찾는 중…</div>`;$('#ask').value='';
-    try{
-      const x=await jf(`/api/p/${pid}/courses/${cid}/tutor`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})});
-      $('#thinking')?.remove();$('#chat').innerHTML+=`<div class="bubble ai">${esc(x.answer)}</div>`;$('#chat').scrollTop=$('#chat').scrollHeight;
-    }catch(e){if(PID===pid&&CID===cid){$('#thinking')?.remove();$('#ask').value=q;}throw e;}
-  });
-};
-function syncViewport(){document.documentElement.style.setProperty('--app-h',`${window.visualViewport?.height||innerHeight}px`);}
-window.addEventListener('resize',syncViewport,{passive:true});window.addEventListener('orientationchange',syncViewport,{passive:true});window.visualViewport?.addEventListener('resize',syncViewport,{passive:true});syncViewport();
-
-
-(async()=>{
-  try{
-    await loadProfiles();await restoreSession();
-    const runtime=await jf('/api/runtime');
-    if(!runtime.ai_configured){$('#aiStatus').textContent='AI 연결 전이야. PDF 기본 정리와 원본 보관은 사용할 수 있어. 이미지·스캔 자료 읽기와 AI 질문은 연결 후 이용할 수 있어.';$('#aiStatus').classList.remove('hidden');}
-  }catch(e){$('#profiles').textContent=`연결하지 못했어: ${e.message}. 새로고침해서 다시 시도해줘.`;}
-})();
+uploadDocs=async function(){const files=[...$('#files').files],pid=PID,cid=CID;if(!files.length)return alert('PDF 또는 이미지를 골라줘.');if(files.length>15)return alert('한 번에 15개까지 올릴 수 있어.');if(files.some(f=>f.size>40*1024*1024))return alert('파일당 40MB까지 올릴 수 있어.');const fd=new FormData();files.forEach(f=>fd.append('files',f));fd.append('document_type',$('#dtype').value);const button=document.querySelector('[onclick="uploadDocs()"]');await busy(button,async()=>{$('#uploadStatus').textContent='자료를 업로드하고 읽는 중이야. 이미지·스캔 PDF는 시간이 조금 걸릴 수 있어.';try{const x=await jf(`/api/p/${pid}/courses/${cid}/documents`,{method:'POST',body:fd});if(PID!==pid||CID!==cid)return;const messages=[...x.added.map(d=>`${d.name}: ${d.warning||'추가 완료'}`),...(x.skipped||[]).map(d=>`${d.name}: 이미 보관된 자료`),...(x.errors||[]).map(d=>`${d.name}: ${d.message}`)];await openCourse(cid);$('#uploadStatus').textContent=messages.join('\n');}catch(e){if(PID===pid&&CID===cid)$('#uploadStatus').textContent=e.message;throw e;}});};
+for(const name of ['analyze','makeQuiz','analyzePattern','gradeQuiz','askTutor']){const original=window[name];window[name]=async function(){const b=document.querySelector(`[onclick="${name}()"]`);return busy(b,()=>original());};}
+askTutor=async function(){const q=$('#ask').value.trim(),pid=PID,cid=CID;if(!q)return;const button=document.querySelector('[onclick="askTutor()"]');await busy(button,async()=>{$('#chat').innerHTML+=`<div class="bubble me">${esc(q)}</div><div class="bubble ai" id="thinking">현재 과목 자료에서 근거를 찾는 중…</div>`;$('#ask').value='';try{const x=await jf(`/api/p/${pid}/courses/${cid}/tutor`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})});$('#thinking')?.remove();$('#chat').innerHTML+=`<div class="bubble ai">${esc(x.answer)}</div>`;$('#chat').scrollTop=$('#chat').scrollHeight;}catch(e){if(PID===pid&&CID===cid){$('#thinking')?.remove();$('#ask').value=q;}throw e;}});};
+function syncViewport(){document.documentElement.style.setProperty('--app-h',`${window.visualViewport?.height||innerHeight}px`);}window.addEventListener('resize',syncViewport,{passive:true});window.addEventListener('orientationchange',syncViewport,{passive:true});window.visualViewport?.addEventListener('resize',syncViewport,{passive:true});syncViewport();
+(async()=>{try{await loadProfiles();await restoreSession();const runtime=await jf('/api/runtime');if(!runtime.ai_configured){$('#aiStatus').textContent='AI 연결 전이야. PDF 기본 정리와 원본 보관은 사용할 수 있어. 이미지·스캔 자료 읽기와 AI 질문은 연결 후 이용할 수 있어.';$('#aiStatus').classList.remove('hidden');}}catch(e){$('#profiles').textContent=`연결하지 못했어: ${e.message}. 새로고침해서 다시 시도해줘.`;}})();
