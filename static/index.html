@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#d6ff00"><link rel="icon" href="/icons/icon-192.png"><link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
 <title>FOR'EST</title>
 <link rel="manifest" href="/manifest.webmanifest">
+<script>if(matchMedia('(display-mode: standalone)').matches||navigator.standalone===true)document.documentElement.classList.add('standalone-launch')</script>
 <style>
 :root{--bg:#f6f7fb;--card:#fff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--a:#4f46e5;--good:#059669;--bad:#dc2626;--soft:#eef2ff}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -27,9 +28,11 @@ label{font-size:12px;font-weight:850;display:block;margin:10px 0 5px}.row{displa
 .chat{max-height:430px;overflow:auto}.bubble{padding:12px 13px;border-radius:16px;margin:9px 0;white-space:pre-wrap;line-height:1.55}.me{background:#eef2ff;margin-left:12%}.ai{background:#f8fafc;margin-right:5%}
 .flash{min-height:210px;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;border:1px solid var(--line);border-radius:18px;font-size:19px;font-weight:850}
 .notice{padding:10px 12px;border-radius:12px;background:#fffbeb;color:#92400e;font-size:12px;line-height:1.5}.ok{background:#ecfdf5;color:#065f46}.namespace{font-family:ui-monospace,monospace;font-size:10px;color:#64748b}.timer{font-variant-numeric:tabular-nums;font-weight:950;font-size:22px}
+.launch-splash{display:none}.standalone-launch .launch-splash{position:fixed;z-index:10000;inset:0;display:grid;place-items:center;background:#d6ff00;color:#17231e;transition:opacity .28s ease,visibility .28s ease}.launch-splash.is-leaving{opacity:0;visibility:hidden}.launch-lockup{display:grid;justify-items:center;gap:16px}.launch-icon{width:clamp(108px,26vw,156px);height:clamp(108px,26vw,156px);border-radius:28%;box-shadow:0 18px 45px rgba(23,35,30,.18);animation:launch-pop .72s cubic-bezier(.2,.8,.2,1) both}.launch-word{font-size:clamp(29px,7vw,42px);font-weight:950;letter-spacing:-.05em;animation:launch-rise .55s .18s ease both}.launch-tagline{font-size:12px;font-weight:850;letter-spacing:.16em;opacity:.7;animation:launch-rise .55s .28s ease both}@keyframes launch-pop{0%{opacity:0;transform:scale(.72) rotate(-5deg)}65%{transform:scale(1.06) rotate(1deg)}100%{opacity:1;transform:scale(1) rotate(0)}}@keyframes launch-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.launch-icon,.launch-word,.launch-tagline{animation:none}.launch-splash{transition:none!important}}
 </style>
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="FOR&#39;EST"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="format-detection" content="telephone=no"><link rel="stylesheet" href="/app.css?v=11"></head>
-<body><main class="shell">
+<body><div id="launchSplash" class="launch-splash" aria-hidden="true"><div class="launch-lockup"><img class="launch-icon" src="/icons/icon-192.png" alt=""><div class="launch-word">FOR&#39;EST</div><div class="launch-tagline">YOUR STUDY SPACE</div></div></div><main class="shell">
+<script>(()=>{const splash=document.getElementById('launchSplash');if(!document.documentElement.classList.contains('standalone-launch')){splash.remove();return}const started=performance.now(),dismiss=()=>setTimeout(()=>{splash.classList.add('is-leaving');setTimeout(()=>splash.remove(),320)},Math.max(0,900-(performance.now()-started)));if(document.readyState==='complete')dismiss();else addEventListener('load',dismiss,{once:true});setTimeout(dismiss,2400)})()</script>
 
 <section id="gate" class="gate">
   <div class="card">
