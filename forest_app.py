@@ -1,4 +1,7 @@
 import json
+import os
+import urllib.request
+import urllib.error
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 import server
@@ -27,10 +30,41 @@ def ensure_marks(con):
     con.execute('CREATE INDEX IF NOT EXISTS idx_user_marks_course ON user_marks(course_id,id DESC)')
     con.execute('CREATE INDEX IF NOT EXISTS idx_user_marks_source_document ON user_marks(course_id,source_document_id)')
 
+def ensure_lectures(con):
+    con.execute('''CREATE TABLE IF NOT EXISTS lecture_sessions(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      course_id INTEGER NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      started_at TEXT NOT NULL,
+      ended_at TEXT DEFAULT '',
+      duration_seconds REAL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'recording',
+      FOREIGN KEY(course_id) REFERENCES courses(id) ON DELETE CASCADE
+    )''')
+    con.execute('''CREATE TABLE IF NOT EXISTS lecture_transcript(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      start_seconds REAL NOT NULL DEFAULT 0,
+      end_seconds REAL NOT NULL DEFAULT 0,
+      importance TEXT NOT NULL DEFAULT 'normal',
+      client_event_id TEXT DEFAULT '',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(session_id) REFERENCES lecture_sessions(id) ON DELETE CASCADE
+    )''')
+    con.execute('CREATE INDEX IF NOT EXISTS idx_lecture_sessions_course ON lecture_sessions(course_id,id DESC)')
+    con.execute('CREATE INDEX IF NOT EXISTS idx_lecture_transcript_session ON lecture_transcript(session_id,start_seconds,id)')
+    con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_lecture_event_unique ON lecture_transcript(session_id,client_event_id) WHERE client_event_id<>''")
+
 def mark_rows(cid):
     con=server.db();ensure_marks(con);rows=[dict(r) for r in con.execute('SELECT * FROM user_marks WHERE course_id=? ORDER BY id DESC',(cid,)).fetchall()];con.commit();con.close();return rows
 
-_startup_con=server.db();ensure_marks(_startup_con);_startup_con.commit();_startup_con.close()
+_startup_con=server.db();ensure_marks(_startup_con);ensure_lectures(_startup_con);_startup_con.commit();_startup_con.close()
+
+def owned_session(pid,cid,sid):
+    server.course_row(pid,cid);con=server.db();ensure_lectures(con);row=con.execute('SELECT * FROM lecture_sessions WHERE id=? AND course_id=?',(sid,cid)).fetchone();con.commit();con.close()
+    if not row:raise HTTPException(404,'강의 녹음 세션을 찾지 못했어.')
+    return dict(row)
 
 @app.get('/api/p/{pid}/courses/{cid}/marks')
 def marks(pid:int,cid:int):
@@ -72,9 +106,68 @@ async def add_mark(pid:int,cid:int,request:Request):
 
 @app.delete('/api/p/{pid}/courses/{cid}/marks/{mid}')
 def remove_mark(pid:int,cid:int,mid:int):
-    server.course_row(pid,cid);con=server.db();ensure_marks(con);cur=con.execute('DELETE FROM user_marks WHERE id=? AND course_id=?',(mid,cid));con.commit();con.close()
-    if not cur.rowcount:raise HTTPException(404,'표시한 내용을 찾지 못했어.')
-    return {'ok':True}
+    server.course_row(pid,cid);con=server.db();ensure_marks(con);row=con.execute('SELECT source_type FROM user_marks WHERE id=? AND course_id=?',(mid,cid)).fetchone()
+    if not row:con.close();raise HTTPException(404,'표시한 내용을 찾지 못했어.')
+    if row['source_type']=='annotation':con.close();raise HTTPException(409,'자료 위 텍스트 필기는 원본 필기 화면에서 수정해줘.')
+    con.execute('DELETE FROM user_marks WHERE id=? AND course_id=?',(mid,cid));con.commit();con.close();return {'ok':True}
+
+@app.get('/api/realtime-token')
+def realtime_token(request:Request):
+    key=os.getenv('OPENAI_API_KEY','').strip()
+    if not key:raise HTTPException(503,'OpenAI API 키가 서버에 연결되지 않았어.')
+    model=os.getenv('OPENAI_REALTIME_MODEL','gpt-realtime')
+    body=json.dumps({'session':{'type':'transcription','audio':{'input':{'transcription':{'model':os.getenv('OPENAI_TRANSCRIBE_MODEL','gpt-4o-mini-transcribe'),'language':'ko'}}}}}).encode()
+    req=urllib.request.Request('https://api.openai.com/v1/realtime/client_secrets',data=body,method='POST',headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'})
+    try:
+        with urllib.request.urlopen(req,timeout=20) as res:data=json.loads(res.read().decode())
+    except urllib.error.HTTPError as e:
+        detail=e.read().decode(errors='ignore')[:500];raise HTTPException(502,'Realtime 토큰 발급 실패: '+detail)
+    except Exception:raise HTTPException(502,'Realtime 토큰 발급에 실패했어.')
+    value=data.get('value') or data.get('client_secret',{}).get('value')
+    if not value:raise HTTPException(502,'Realtime 임시 토큰을 받지 못했어.')
+    return {'value':value,'model':model}
+
+@app.post('/api/p/{pid}/courses/{cid}/lectures')
+async def create_lecture(pid:int,cid:int,request:Request):
+    server.course_row(pid,cid)
+    try:data=await request.json()
+    except Exception:data={}
+    title=str((data or {}).get('title') or '강의 녹음').strip()[:200]
+    con=server.db();ensure_lectures(con);cur=con.execute('INSERT INTO lecture_sessions(course_id,title,started_at,status) VALUES(?,?,?,?)',(cid,title,server.nowiso(),'recording'));con.commit();sid=cur.lastrowid;con.close();return {'id':sid,'title':title,'status':'recording'}
+
+@app.get('/api/p/{pid}/courses/{cid}/lectures')
+def list_lectures(pid:int,cid:int):
+    server.course_row(pid,cid);con=server.db();ensure_lectures(con);rows=[dict(r) for r in con.execute('SELECT * FROM lecture_sessions WHERE course_id=? ORDER BY id DESC',(cid,)).fetchall()];con.commit();con.close();return {'lectures':rows}
+
+@app.get('/api/p/{pid}/courses/{cid}/lectures/{sid}/transcript')
+def lecture_transcript(pid:int,cid:int,sid:int):
+    owned_session(pid,cid,sid);con=server.db();ensure_lectures(con);rows=[dict(r) for r in con.execute('SELECT * FROM lecture_transcript WHERE session_id=? ORDER BY start_seconds,id',(sid,)).fetchall()];con.commit();con.close();return {'segments':rows}
+
+@app.post('/api/p/{pid}/courses/{cid}/lectures/{sid}/transcript')
+async def add_transcript(pid:int,cid:int,sid:int,request:Request):
+    session=owned_session(pid,cid,sid)
+    if session['status']=='finished':raise HTTPException(409,'이미 종료된 강의 녹음이야.')
+    try:data=await request.json()
+    except Exception:raise HTTPException(400,'자막 데이터를 읽지 못했어.')
+    text=str((data or {}).get('text') or '').strip()
+    if not text or len(text)>10000:raise HTTPException(400,'자막 내용이 올바르지 않아.')
+    try:start=max(0,float(data.get('start_seconds') or 0));end=max(start,float(data.get('end_seconds') or start))
+    except Exception:raise HTTPException(400,'자막 시간이 올바르지 않아.')
+    importance=str(data.get('importance') or 'normal');importance=importance if importance in {'normal','ai','professor','user'} else 'normal';event=str(data.get('client_event_id') or '')[:200]
+    con=server.db();ensure_lectures(con)
+    if event:
+        old=con.execute('SELECT id FROM lecture_transcript WHERE session_id=? AND client_event_id=?',(sid,event)).fetchone()
+        if old:con.commit();con.close();return {'ok':True,'id':old['id'],'duplicate':True}
+    cur=con.execute('INSERT INTO lecture_transcript(session_id,text,start_seconds,end_seconds,importance,client_event_id,created_at) VALUES(?,?,?,?,?,?,?)',(sid,text,round(start,3),round(end,3),importance,event,server.nowiso()));con.commit();segid=cur.lastrowid;con.close();return {'ok':True,'id':segid,'duplicate':False}
+
+@app.post('/api/p/{pid}/courses/{cid}/lectures/{sid}/finish')
+async def finish_lecture(pid:int,cid:int,sid:int,request:Request):
+    owned_session(pid,cid,sid)
+    try:data=await request.json()
+    except Exception:data={}
+    try:duration=max(0,float((data or {}).get('duration_seconds') or 0))
+    except Exception:duration=0
+    con=server.db();ensure_lectures(con);con.execute("UPDATE lecture_sessions SET ended_at=?,duration_seconds=?,status='finished' WHERE id=? AND course_id=?",(server.nowiso(),round(duration,3),sid,cid));con.commit();con.close();return {'ok':True,'status':'finished'}
 
 _core_clean=server.clean_annotation_items
 def clean_annotation_items(items):
@@ -111,9 +204,11 @@ async def save_annotations_with_marks(pid:int,cid:int,did:int,request:Request,pa
 app.router.routes[:]=[r for r in app.router.routes if getattr(r,'path',None)!='/api/p/{pid}/backup']
 @app.get('/api/p/{pid}/backup')
 def backup_v3(pid:int):
-    p=server.profile_row(pid);con=server.db();ensure_marks(con);courses=[dict(x) for x in con.execute('SELECT * FROM courses WHERE profile_id=?',(pid,)).fetchall()];ids=[x['id'] for x in courses]
-    data={'profile':{'id':p['id'],'name':p['name']},'courses':courses,'documents':[],'attempts':[],'card_reviews':[],'tutor_messages':[],'exam_patterns':[],'document_annotations':[],'user_marks':[],'format_version':3}
+    p=server.profile_row(pid);con=server.db();ensure_marks(con);ensure_lectures(con);courses=[dict(x) for x in con.execute('SELECT * FROM courses WHERE profile_id=?',(pid,)).fetchall()];ids=[x['id'] for x in courses]
+    data={'profile':{'id':p['id'],'name':p['name']},'courses':courses,'documents':[],'attempts':[],'card_reviews':[],'tutor_messages':[],'exam_patterns':[],'document_annotations':[],'user_marks':[],'lecture_sessions':[],'lecture_transcript':[],'format_version':4}
     for cid in ids:
-        docs=[dict(x) for x in con.execute('SELECT id,course_id,name,pages,text_json,sha256,document_type,extraction_mode,image_count,created_at FROM documents WHERE course_id=?',(cid,)).fetchall()];data['documents']+=docs;data['attempts'] += [dict(x) for x in con.execute('SELECT * FROM attempts WHERE course_id=?',(cid,)).fetchall()];data['card_reviews'] += [dict(x) for x in con.execute('SELECT * FROM card_reviews WHERE course_id=?',(cid,)).fetchall()];data['tutor_messages'] += [dict(x) for x in con.execute('SELECT * FROM tutor_messages WHERE course_id=?',(cid,)).fetchall()];data['exam_patterns'] += [dict(x) for x in con.execute('SELECT * FROM exam_patterns WHERE course_id=?',(cid,)).fetchall()];data['user_marks'] += [dict(x) for x in con.execute('SELECT * FROM user_marks WHERE course_id=?',(cid,)).fetchall()]
+        docs=[dict(x) for x in con.execute('SELECT id,course_id,name,pages,text_json,sha256,document_type,extraction_mode,image_count,created_at FROM documents WHERE course_id=?',(cid,)).fetchall()];data['documents']+=docs;data['attempts'] += [dict(x) for x in con.execute('SELECT * FROM attempts WHERE course_id=?',(cid,)).fetchall()];data['card_reviews'] += [dict(x) for x in con.execute('SELECT * FROM card_reviews WHERE course_id=?',(cid,)).fetchall()];data['exam_patterns'] += [dict(x) for x in con.execute('SELECT * FROM exam_patterns WHERE course_id=?',(cid,)).fetchall()];data['user_marks'] += [dict(x) for x in con.execute('SELECT * FROM user_marks WHERE course_id=?',(cid,)).fetchall()]
+        sessions=[dict(x) for x in con.execute('SELECT * FROM lecture_sessions WHERE course_id=?',(cid,)).fetchall()];data['lecture_sessions']+=sessions
+        for s in sessions:data['lecture_transcript'] += [dict(x) for x in con.execute('SELECT * FROM lecture_transcript WHERE session_id=?',(s['id'],)).fetchall()]
         for d in docs:data['document_annotations'] += [dict(x) for x in con.execute('SELECT document_id,page,data_json,updated_at FROM document_annotations WHERE document_id=?',(d['id'],)).fetchall()]
-    con.commit();con.close();return JSONResponse(data,headers={'Content-Disposition':f'attachment; filename="forest_profile_{pid}_backup_v3.json"'})
+    con.commit();con.close();return JSONResponse(data,headers={'Content-Disposition':f'attachment; filename="forest_profile_{pid}_backup_v4.json"'})
