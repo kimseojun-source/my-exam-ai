@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v13" in script
-    for asset in ["/app.css?v=12", "/app.js?v=12", "/detail.js?v=4", "/install.js?v=1"]:
+    assert "forest-shell-v14" in script
+    for asset in ["/app.css?v=13", "/app.js?v=13", "/detail.js?v=4", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -80,3 +80,16 @@ def test_recording_ui_and_native_microphone_bridge():
     assert "/v1/realtime/calls" in script
     assert "RESOURCE_AUDIO_CAPTURE" in activity
     assert "forest-v12-runtime-production.up.railway.app" in activity
+
+
+def test_market_inspired_today_dashboard_guides_next_action():
+    html = (ROOT / "static/index.html").read_text()
+    script = (ROOT / "static/app.js").read_text()
+    styles = (ROOT / "static/app.css").read_text()
+    assert 'id="studyMission"' in html
+    assert 'id="studyReadiness"' in html
+    assert "function studyDashboardState" in script
+    for action in ["upload", "analyze", "review", "quiz", "mock"]:
+        assert f"kind:'{action}'" in script
+    assert "data-study-action" in script
+    assert ".study-mission" in styles
