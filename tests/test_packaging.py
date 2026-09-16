@@ -34,3 +34,11 @@ def test_ios_pwa_has_install_guidance_and_apple_metadata():
     assert '홈 화면에 추가' in script
     assert 'navigator.standalone' in script
     assert '"orientation": "any"' in manifest
+
+
+def test_annotation_close_saves_before_dismissal():
+    script = (ROOT / "static/app.js").read_text()
+    assert '저장 후 닫기' in script
+    assert 'if(a.dirty)await saveAnnotations()' in script
+    assert "if(ANNO===a)closeAnnotator()" in script
+    assert "addEventListener('beforeunload'" in script
