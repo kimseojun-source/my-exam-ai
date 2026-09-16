@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 import server
 
 app = server.app
+MARK_TYPES={'core','annotation','lecture','manual','past_exam'}
 
 def ensure_marks(con):
     con.execute('''CREATE TABLE IF NOT EXISTS user_marks(
@@ -23,6 +24,9 @@ def ensure_marks(con):
 def mark_rows(cid):
     con=server.db();ensure_marks(con);rows=[dict(r) for r in con.execute('SELECT * FROM user_marks WHERE course_id=? ORDER BY id DESC',(cid,)).fetchall()];con.commit();con.close();return rows
 
+# Run the additive migration on application startup, not only after the first marks request.
+_startup_con=server.db();ensure_marks(_startup_con);_startup_con.commit();_startup_con.close()
+
 @app.get('/api/p/{pid}/courses/{cid}/marks')
 def marks(pid:int,cid:int):
     server.course_row(pid,cid);rows=mark_rows(cid);return {'marks':rows,'count':len(rows)}
@@ -32,13 +36,18 @@ async def add_mark(pid:int,cid:int,request:Request):
     server.course_row(pid,cid)
     try:data=await request.json()
     except Exception:raise HTTPException(400,'표시할 내용을 읽지 못했어.')
-    content=str(data.get('content') or '').strip() if isinstance(data,dict) else ''
+    if not isinstance(data,dict):raise HTTPException(400,'표시할 내용을 읽지 못했어.')
+    content=str(data.get('content') or '').strip()
     if not content or len(content)>10000:raise HTTPException(400,'표시 내용은 1~10000자로 입력해줘.')
-    source_type=str(data.get('source_type') or 'core')[:40];source_doc=str(data.get('source_doc') or '')[:300];locator=str(data.get('locator') or '')[:500];category=str(data.get('category') or '')[:80];page=data.get('page')
+    source_type=str(data.get('source_type') or 'core').strip()
+    if source_type not in MARK_TYPES:raise HTTPException(400,'지원하지 않는 표시 출처야.')
+    source_doc=str(data.get('source_doc') or '').strip()
+    locator=str(data.get('locator') or '').strip();category=str(data.get('category') or '').strip();page=data.get('page')
+    if len(source_doc)>300 or len(locator)>500 or len(category)>80:raise HTTPException(400,'표시 출처 정보가 너무 길어.')
     if page not in (None,''):
         try:page=int(page)
         except Exception:raise HTTPException(400,'페이지 번호가 올바르지 않아.')
-        if page<1:raise HTTPException(400,'페이지 번호가 올바르지 않아.')
+        if page<1 or page>100000:raise HTTPException(400,'페이지 번호가 올바르지 않아.')
     else:page=None
     con=server.db();ensure_marks(con);old=con.execute('SELECT id FROM user_marks WHERE course_id=? AND content=? AND source_type=? AND source_doc=? AND COALESCE(page,-1)=COALESCE(?,-1) AND locator=? LIMIT 1',(cid,content,source_type,source_doc,page,locator)).fetchone()
     if old:con.commit();con.close();return {'ok':True,'id':old['id'],'duplicate':True}
