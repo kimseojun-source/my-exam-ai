@@ -42,3 +42,13 @@ def test_annotation_close_saves_before_dismissal():
     assert 'if(a.dirty)await saveAnnotations()' in script
     assert "if(ANNO===a)closeAnnotator()" in script
     assert "addEventListener('beforeunload'" in script
+
+
+def test_pwa_offline_cache_contains_only_public_shell():
+    script = (ROOT / "static/sw.js").read_text()
+    assert "forest-shell-v10" in script
+    for asset in ["/app.css?v=11", "/app.js?v=10", "/detail.js?v=4", "/install.js?v=1"]:
+        assert asset in script
+    assert "url.pathname.startsWith('/api/')" in script
+    assert "cache.put('/',response.clone())" in script
+    assert "caches.match('/')||caches.match('/offline.html')" in script
