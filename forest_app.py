@@ -50,21 +50,30 @@ def remove_mark(pid:int,cid:int,mid:int):
     if not cur.rowcount:raise HTTPException(404,'표시한 내용을 찾지 못했어.')
     return {'ok':True}
 
-# Keep text written on a document searchable in the same "내가 표시한 내용" collection.
+# Extend the core validator without weakening its size/coordinate limits.
+_core_clean=server.clean_annotation_items
+def clean_annotation_items(items):
+    clean,encoded=_core_clean([{k:v for k,v in item.items() if k!='opacity'} if isinstance(item,dict) else item for item in items] if isinstance(items,list) else items)
+    for original,saved in zip(items or [],clean):
+        if saved.get('type')=='stroke' and isinstance(original,dict) and 'opacity' in original:
+            try:opacity=float(original['opacity'])
+            except Exception:raise HTTPException(400,'필기 투명도가 올바르지 않아.')
+            if not 0.1<=opacity<=1:raise HTTPException(400,'필기 투명도가 올바르지 않아.')
+            saved['opacity']=round(opacity,2)
+    encoded=json.dumps(clean,ensure_ascii=False,separators=(',',':'))
+    if len(encoded.encode('utf-8'))>2*1024*1024:raise HTTPException(413,'한 페이지 필기는 2MB까지 저장할 수 있어.')
+    return clean,encoded
+
 annotation_path='/api/p/{pid}/courses/{cid}/documents/{did}/annotations'
 app.router.routes[:]=[r for r in app.router.routes if not (getattr(r,'path',None)==annotation_path and 'PUT' in getattr(r,'methods',set()))]
-
 @app.put(annotation_path)
 async def save_annotations_with_marks(pid:int,cid:int,did:int,request:Request,page:int=1):
     row,_=server.owned_document(pid,cid,did);page=server.annotation_page(row,page)
     try:payload=await request.json()
     except Exception:raise HTTPException(400,'필기 데이터를 읽지 못했어.')
-    items,encoded=server.clean_annotation_items(payload.get('items') if isinstance(payload,dict) else None);stamp=server.nowiso();con=server.db();ensure_marks(con)
+    items,encoded=clean_annotation_items(payload.get('items') if isinstance(payload,dict) else None);stamp=server.nowiso();con=server.db();ensure_marks(con)
     try:
-        con.execute('BEGIN IMMEDIATE')
-        con.execute('''INSERT INTO document_annotations(document_id,page,data_json,updated_at) VALUES(?,?,?,?) ON CONFLICT(document_id,page) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at''',(did,page,encoded,stamp))
-        prefix=f'annotation:{did}:{page}:'
-        con.execute("DELETE FROM user_marks WHERE course_id=? AND source_type='annotation' AND locator LIKE ?",(cid,prefix+'%'))
+        con.execute('BEGIN IMMEDIATE');con.execute('''INSERT INTO document_annotations(document_id,page,data_json,updated_at) VALUES(?,?,?,?) ON CONFLICT(document_id,page) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at''',(did,page,encoded,stamp));prefix=f'annotation:{did}:{page}:';con.execute("DELETE FROM user_marks WHERE course_id=? AND source_type='annotation' AND locator LIKE ?",(cid,prefix+'%'))
         for index,item in enumerate(items):
             if item.get('type')!='text':continue
             text=str(item.get('text') or '').strip()
@@ -74,15 +83,12 @@ async def save_annotations_with_marks(pid:int,cid:int,did:int,request:Request,pa
     finally:con.close()
     return {'ok':True,'page':page,'count':len(items),'updated_at':stamp,'text_marks':sum(1 for x in items if x.get('type')=='text')}
 
-# Replace v2 backup with a backward-compatible v3 response preserving marks and page annotations.
 app.router.routes[:]=[r for r in app.router.routes if getattr(r,'path',None)!='/api/p/{pid}/backup']
-
 @app.get('/api/p/{pid}/backup')
 def backup_v3(pid:int):
     p=server.profile_row(pid);con=server.db();ensure_marks(con);courses=[dict(x) for x in con.execute('SELECT * FROM courses WHERE profile_id=?',(pid,)).fetchall()];ids=[x['id'] for x in courses]
     data={'profile':{'id':p['id'],'name':p['name']},'courses':courses,'documents':[],'attempts':[],'card_reviews':[],'tutor_messages':[],'exam_patterns':[],'document_annotations':[],'user_marks':[],'format_version':3}
     for cid in ids:
-        docs=[dict(x) for x in con.execute('SELECT id,course_id,name,pages,text_json,sha256,document_type,extraction_mode,image_count,created_at FROM documents WHERE course_id=?',(cid,)).fetchall()];data['documents']+=docs
-        data['attempts'] += [dict(x) for x in con.execute('SELECT * FROM attempts WHERE course_id=?',(cid,)).fetchall()];data['card_reviews'] += [dict(x) for x in con.execute('SELECT * FROM card_reviews WHERE course_id=?',(cid,)).fetchall()];data['tutor_messages'] += [dict(x) for x in con.execute('SELECT * FROM tutor_messages WHERE course_id=?',(cid,)).fetchall()];data['exam_patterns'] += [dict(x) for x in con.execute('SELECT * FROM exam_patterns WHERE course_id=?',(cid,)).fetchall()];data['user_marks'] += [dict(x) for x in con.execute('SELECT * FROM user_marks WHERE course_id=?',(cid,)).fetchall()]
+        docs=[dict(x) for x in con.execute('SELECT id,course_id,name,pages,text_json,sha256,document_type,extraction_mode,image_count,created_at FROM documents WHERE course_id=?',(cid,)).fetchall()];data['documents']+=docs;data['attempts'] += [dict(x) for x in con.execute('SELECT * FROM attempts WHERE course_id=?',(cid,)).fetchall()];data['card_reviews'] += [dict(x) for x in con.execute('SELECT * FROM card_reviews WHERE course_id=?',(cid,)).fetchall()];data['tutor_messages'] += [dict(x) for x in con.execute('SELECT * FROM tutor_messages WHERE course_id=?',(cid,)).fetchall()];data['exam_patterns'] += [dict(x) for x in con.execute('SELECT * FROM exam_patterns WHERE course_id=?',(cid,)).fetchall()];data['user_marks'] += [dict(x) for x in con.execute('SELECT * FROM user_marks WHERE course_id=?',(cid,)).fetchall()]
         for d in docs:data['document_annotations'] += [dict(x) for x in con.execute('SELECT document_id,page,data_json,updated_at FROM document_annotations WHERE document_id=?',(d['id'],)).fetchall()]
     con.commit();con.close();return JSONResponse(data,headers={'Content-Disposition':f'attachment; filename="forest_profile_{pid}_backup_v3.json"'})
