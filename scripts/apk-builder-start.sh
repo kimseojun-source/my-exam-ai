@@ -21,9 +21,9 @@ bash /tmp/forest-source/android/build.sh
 cd /tmp/forest-source/build/android
 # Only the signed APK and minimal landing page are served, not build intermediates or keys.
 mkdir -p /tmp/forest-public
-cp FOREST-9.1.0.apk /tmp/forest-public/
-sha256sum FOREST-9.1.0.apk | awk '{print $1}' > /tmp/forest-public/FOREST-9.1.0.apk.sha256
-printf '{"version":"9.1.0","source":"%s"}\n' "$SOURCE_REF" > /tmp/forest-public/build.json
+cp FOREST-9.2.0.apk /tmp/forest-public/
+sha256sum FOREST-9.2.0.apk | awk '{print $1}' > /tmp/forest-public/FOREST-9.2.0.apk.sha256
+printf '{"version":"9.2.0","source":"%s"}\n' "$SOURCE_REF" > /tmp/forest-public/build.json
 cp /tmp/forest-source/static/icons/icon-192.png /tmp/forest-public/icon.png
 cp /tmp/forest-source/android/download.html /tmp/forest-public/index.html
 cd /tmp/forest-public

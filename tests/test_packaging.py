@@ -6,8 +6,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_android_release_metadata_and_custom_icon():
     manifest = (ROOT / "android/AndroidManifest.xml").read_text()
-    assert 'android:versionCode="901"' in manifest
-    assert 'android:versionName="9.1.0"' in manifest
+    assert 'android:versionCode="920"' in manifest
+    assert 'android:versionName="9.2.0"' in manifest
+    assert 'android.permission.RECORD_AUDIO' in manifest
     assert 'android:icon="@mipmap/ic_launcher"' in manifest
     assert 'android:roundIcon="@mipmap/ic_launcher_round"' in manifest
 
@@ -18,10 +19,10 @@ def test_builder_serves_only_signed_release_and_keeps_signer_on_volume():
     assert 'FOREST_SOURCE_COMMIT:-main' in start
     assert '/data' in start
     assert 'forest-release.p12' in start
-    assert 'FOREST-9.1.0.apk' in start
+    assert 'FOREST-9.2.0.apk' in start
     assert 'FOREST_KEYSTORE_PATH' in build
     assert 'apksigner' in build
-    assert 'FOREST-9.1.0.apk' in build
+    assert 'FOREST-9.2.0.apk' in build
 
 
 def test_ios_pwa_has_install_guidance_and_apple_metadata():
@@ -46,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v12" in script
-    for asset in ["/app.css?v=11", "/app.js?v=10", "/detail.js?v=4", "/install.js?v=1"]:
+    assert "forest-shell-v13" in script
+    for asset in ["/app.css?v=12", "/app.js?v=12", "/detail.js?v=4", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -65,3 +66,17 @@ def test_installed_pwa_has_branded_launch_animation():
     assert "animation-delay:.44s" in html
     assert "animation:brandIn .45s" in html
     assert "prefers-reduced-motion:reduce" in html
+
+
+def test_recording_ui_and_native_microphone_bridge():
+    html = (ROOT / "static/index.html").read_text()
+    script = (ROOT / "static/app.js").read_text()
+    activity = (ROOT / "android/src/com/myexamai/app/MainActivity.java").read_text()
+    assert 'id="startRecording"' in html
+    assert 'id="liveTranscript"' in html
+    assert "navigator.mediaDevices.getUserMedia" in script
+    assert "new MediaRecorder" in script
+    assert "createDataChannel('oai-events')" in script
+    assert "/v1/realtime/calls" in script
+    assert "RESOURCE_AUDIO_CAPTURE" in activity
+    assert "forest-v12-runtime-production.up.railway.app" in activity

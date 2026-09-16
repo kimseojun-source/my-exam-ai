@@ -29,7 +29,7 @@ label{font-size:12px;font-weight:850;display:block;margin:10px 0 5px}.row{displa
 .notice{padding:10px 12px;border-radius:12px;background:#fffbeb;color:#92400e;font-size:12px;line-height:1.5}.ok{background:#ecfdf5;color:#065f46}.namespace{font-family:ui-monospace,monospace;font-size:10px;color:#64748b}.timer{font-variant-numeric:tabular-nums;font-weight:950;font-size:22px}
 .splash{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:#c7ff19;color:#090d08;overflow:hidden;animation:splashOut .38s ease 1.7s forwards}.splashWords{display:grid;gap:6px;text-align:center;font-weight:900;font-size:clamp(24px,6vw,56px);line-height:1}.splashWords span{opacity:0;transform:translateY(18px);animation:wordIn .3s ease forwards}.splashWords span:nth-child(2){animation-delay:.22s}.splashWords span:nth-child(3){animation-delay:.44s}.splashBrand{position:absolute;font-weight:1000;font-size:clamp(42px,12vw,104px);letter-spacing:-.06em;opacity:0;transform:scale(.88);animation:brandIn .45s cubic-bezier(.2,.8,.2,1) .88s forwards}.splashWords{animation:wordsAway .3s ease .82s forwards}@keyframes wordIn{to{opacity:1;transform:none}}@keyframes wordsAway{to{opacity:0;transform:scale(.92)}}@keyframes brandIn{to{opacity:1;transform:scale(1)}}@keyframes splashOut{to{opacity:0;visibility:hidden;pointer-events:none}}@media(prefers-reduced-motion:reduce){.splashWords{display:none}.splashBrand{opacity:1;transform:none;animation:none}.splash{animation:splashOut .15s linear .65s forwards}}
 </style>
-<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="FOR&#39;EST"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="format-detection" content="telephone=no"><link rel="stylesheet" href="/app.css?v=11"></head>
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="FOR&#39;EST"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="format-detection" content="telephone=no"><link rel="stylesheet" href="/app.css?v=12"></head>
 <body><div id="splash" class="splash" aria-label="FOR'EST 시작 화면"><div class="splashWords"><span>For your</span><span>Ever-Smarter</span><span>Tomorrow</span></div><div class="splashBrand">FOR&#39;EST</div></div><main class="shell">
 
 <section id="gate" class="gate">
@@ -88,6 +88,22 @@ label{font-size:12px;font-weight:850;display:block;margin:10px 0 5px}.row{displa
           <label for="files">PDF·이미지 추가</label><input id="files" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,application/pdf,image/*" multiple><p class="mini">한 번에 15개 · 파일당 40MB · 촬영한 필기와 스캔 PDF도 보관할 수 있어.</p><div id="uploadStatus" role="status" aria-live="polite"></div><div id="documentList"></div>
           <button class="soft" style="width:100%;margin-top:8px" onclick="uploadDocs()">자료 추가</button>
           <div class="notice" style="margin-top:10px">현재 과목 AI에는 <b>현재 사용자 + 현재 과목</b>의 자료만 전달돼. 기출도 별도 유형으로 저장돼.</div>
+          <section class="lecture-recorder" aria-labelledby="lectureRecorderTitle">
+            <div class="recorder-head">
+              <div><h2 id="lectureRecorderTitle">강의 녹음</h2><p class="mini">마이크로 녹음하고 실시간 자막을 현재 과목에만 저장해.</p></div>
+              <span id="recordingClock" class="recording-clock">00:00</span>
+            </div>
+            <label for="lectureTitle">강의 제목</label>
+            <input id="lectureTitle" maxlength="200" placeholder="예: 3주차 수요·공급">
+            <div class="recorder-actions">
+              <button id="startRecording" class="record-button" type="button" onclick="startLectureRecording()">● 녹음 시작</button>
+              <button id="stopRecording" class="dark" type="button" onclick="stopLectureRecording()" disabled>■ 녹음 저장</button>
+            </div>
+            <div id="recordingStatus" class="recorder-status" role="status" aria-live="polite">녹음 시작을 누르면 마이크 권한을 요청해.</div>
+            <div id="liveTranscript" class="live-transcript" aria-live="polite"><span class="sub">실시간 자막이 여기에 표시돼.</span></div>
+            <div id="lectureList" class="lecture-list"></div>
+            <pre id="lectureNote" class="lecture-note hidden"></pre>
+          </section>
         </div>
 
         <div id="aiStatus" class="notice hidden" role="status"></div><div id="kpis" class="kpis"></div>
@@ -290,4 +306,4 @@ async function backup(){
 // Boot is owned by app.js so overrides and error handling are ready first.
 if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
 </script>
-<script src="/app.js?v=10"></script><script src="/detail.js?v=4"></script><script src="/install.js?v=1"></script></body></html>
+<script src="/app.js?v=12"></script><script src="/detail.js?v=4"></script><script src="/install.js?v=1"></script></body></html>

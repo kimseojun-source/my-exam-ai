@@ -1,7 +1,9 @@
 package com.myexamai.app;
 
 import android.app.Activity;
+import android.Manifest;
 import android.app.DownloadManager;
+import android.content.pm.PackageManager;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -13,10 +15,12 @@ import android.webkit.*;
 import android.widget.Toast;
 
 public final class MainActivity extends Activity {
-    private static final String ORIGIN="https://my-exam-ai-live-production.up.railway.app";
+    private static final String ORIGIN="https://forest-v12-runtime-production.up.railway.app";
     private static final int PICK_FILE=41;
+    private static final int MIC_PERMISSION=42;
     private WebView web;
     private ValueCallback<Uri[]> files;
+    private PermissionRequest microphoneRequest;
     private boolean internal(Uri uri) {
         return "https".equals(uri.getScheme()) && Uri.parse(ORIGIN).getHost().equals(uri.getHost()) && (uri.getPort()==-1 || uri.getPort()==443);
     }
@@ -49,6 +53,14 @@ public final class MainActivity extends Activity {
             // Default SSL errors are cancelled. Never bypass certificate validation.
         });
         web.setWebChromeClient(new WebChromeClient(){
+            @Override public void onPermissionRequest(PermissionRequest request){
+                runOnUiThread(()->{
+                    if(!internal(request.getOrigin()) || request.getResources().length!=1 || !PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(request.getResources()[0])){request.deny();return;}
+                    if(android.os.Build.VERSION.SDK_INT<23 || checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED){request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});return;}
+                    if(microphoneRequest!=null)microphoneRequest.deny();microphoneRequest=request;requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},MIC_PERMISSION);
+                });
+            }
+            @Override public void onPermissionRequestCanceled(PermissionRequest request){if(microphoneRequest==request)microphoneRequest=null;}
             @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){
                 if(files!=null)files.onReceiveValue(null);files=callback;
                 Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");
@@ -81,9 +93,17 @@ public final class MainActivity extends Activity {
             files.onReceiveValue(resultUris);files=null;
         }
     }
+    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){
+        super.onRequestPermissionsResult(code,permissions,results);
+        if(code==MIC_PERMISSION && microphoneRequest!=null){
+            if(results.length>0 && results[0]==PackageManager.PERMISSION_GRANTED)microphoneRequest.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+            else microphoneRequest.deny();
+            microphoneRequest=null;
+        }
+    }
     @Override public void onConfigurationChanged(Configuration config){super.onConfigurationChanged(config);web.requestLayout();}
     @Override protected void onSaveInstanceState(Bundle state){super.onSaveInstanceState(state);web.saveState(state);}
     @Override protected void onPause(){CookieManager.getInstance().flush();super.onPause();}
     @Override public void onBackPressed(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
-    @Override protected void onDestroy(){if(files!=null)files.onReceiveValue(null);web.destroy();super.onDestroy();}
+    @Override protected void onDestroy(){if(files!=null)files.onReceiveValue(null);if(microphoneRequest!=null){microphoneRequest.deny();microphoneRequest=null;}web.destroy();super.onDestroy();}
 }
