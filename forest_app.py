@@ -63,7 +63,10 @@ def remove_mark(pid:int,cid:int,mid:int):
     if not cur.rowcount: raise HTTPException(404,'표시한 내용을 찾지 못했어.')
     return {'ok':True}
 
-@app.get('/api/p/{pid}/backup-v3')
+# Replace v2 backup with a backward-compatible v3 response that also preserves marks and page annotations.
+app.router.routes[:]=[r for r in app.router.routes if getattr(r,'path',None)!='/api/p/{pid}/backup']
+
+@app.get('/api/p/{pid}/backup')
 def backup_v3(pid:int):
     p=server.profile_row(pid);con=server.db();ensure_marks(con)
     courses=[dict(x) for x in con.execute('SELECT * FROM courses WHERE profile_id=?',(pid,)).fetchall()]
@@ -77,7 +80,6 @@ def backup_v3(pid:int):
         data['tutor_messages'] += [dict(x) for x in con.execute('SELECT * FROM tutor_messages WHERE course_id=?',(cid,)).fetchall()]
         data['exam_patterns'] += [dict(x) for x in con.execute('SELECT * FROM exam_patterns WHERE course_id=?',(cid,)).fetchall()]
         data['user_marks'] += [dict(x) for x in con.execute('SELECT * FROM user_marks WHERE course_id=?',(cid,)).fetchall()]
-        for d in docs:
-            data['document_annotations'] += [dict(x) for x in con.execute('SELECT document_id,page,data_json,updated_at FROM document_annotations WHERE document_id=?',(d['id'],)).fetchall()]
+        for d in docs:data['document_annotations'] += [dict(x) for x in con.execute('SELECT document_id,page,data_json,updated_at FROM document_annotations WHERE document_id=?',(d['id'],)).fetchall()]
     con.commit();con.close()
     return JSONResponse(data,headers={'Content-Disposition':f'attachment; filename="forest_profile_{pid}_backup_v3.json"'})
