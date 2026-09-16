@@ -13,18 +13,23 @@ def ensure_marks(con):
       content TEXT NOT NULL,
       source_type TEXT NOT NULL DEFAULT 'core',
       source_doc TEXT DEFAULT '',
+      source_document_id INTEGER,
       page INTEGER,
+      timestamp_seconds REAL,
       locator TEXT DEFAULT '',
       category TEXT DEFAULT '',
       created_at TEXT NOT NULL,
       FOREIGN KEY(course_id) REFERENCES courses(id) ON DELETE CASCADE
     )''')
+    columns={r['name'] for r in con.execute('PRAGMA table_info(user_marks)').fetchall()}
+    if 'source_document_id' not in columns:con.execute('ALTER TABLE user_marks ADD COLUMN source_document_id INTEGER')
+    if 'timestamp_seconds' not in columns:con.execute('ALTER TABLE user_marks ADD COLUMN timestamp_seconds REAL')
     con.execute('CREATE INDEX IF NOT EXISTS idx_user_marks_course ON user_marks(course_id,id DESC)')
+    con.execute('CREATE INDEX IF NOT EXISTS idx_user_marks_source_document ON user_marks(course_id,source_document_id)')
 
 def mark_rows(cid):
     con=server.db();ensure_marks(con);rows=[dict(r) for r in con.execute('SELECT * FROM user_marks WHERE course_id=? ORDER BY id DESC',(cid,)).fetchall()];con.commit();con.close();return rows
 
-# Run the additive migration on application startup, not only after the first marks request.
 _startup_con=server.db();ensure_marks(_startup_con);_startup_con.commit();_startup_con.close()
 
 @app.get('/api/p/{pid}/courses/{cid}/marks')
@@ -41,17 +46,29 @@ async def add_mark(pid:int,cid:int,request:Request):
     if not content or len(content)>10000:raise HTTPException(400,'표시 내용은 1~10000자로 입력해줘.')
     source_type=str(data.get('source_type') or 'core').strip()
     if source_type not in MARK_TYPES:raise HTTPException(400,'지원하지 않는 표시 출처야.')
-    source_doc=str(data.get('source_doc') or '').strip()
-    locator=str(data.get('locator') or '').strip();category=str(data.get('category') or '').strip();page=data.get('page')
+    source_doc=str(data.get('source_doc') or '').strip();source_document_id=data.get('source_document_id')
+    locator=str(data.get('locator') or '').strip();category=str(data.get('category') or '').strip();page=data.get('page');timestamp=data.get('timestamp_seconds')
     if len(source_doc)>300 or len(locator)>500 or len(category)>80:raise HTTPException(400,'표시 출처 정보가 너무 길어.')
     if page not in (None,''):
         try:page=int(page)
         except Exception:raise HTTPException(400,'페이지 번호가 올바르지 않아.')
         if page<1 or page>100000:raise HTTPException(400,'페이지 번호가 올바르지 않아.')
     else:page=None
-    con=server.db();ensure_marks(con);old=con.execute('SELECT id FROM user_marks WHERE course_id=? AND content=? AND source_type=? AND source_doc=? AND COALESCE(page,-1)=COALESCE(?,-1) AND locator=? LIMIT 1',(cid,content,source_type,source_doc,page,locator)).fetchone()
+    if source_document_id not in (None,''):
+        try:source_document_id=int(source_document_id)
+        except Exception:raise HTTPException(400,'원본 자료 정보가 올바르지 않아.')
+        con=server.db();doc=con.execute('SELECT id FROM documents WHERE id=? AND course_id=?',(source_document_id,cid)).fetchone();con.close()
+        if not doc:raise HTTPException(400,'이 과목의 원본 자료가 아니야.')
+    else:source_document_id=None
+    if timestamp not in (None,''):
+        try:timestamp=float(timestamp)
+        except Exception:raise HTTPException(400,'강의 시간이 올바르지 않아.')
+        if timestamp<0 or timestamp>864000:raise HTTPException(400,'강의 시간이 올바르지 않아.')
+        timestamp=round(timestamp,3)
+    else:timestamp=None
+    con=server.db();ensure_marks(con);old=con.execute('SELECT id FROM user_marks WHERE course_id=? AND content=? AND source_type=? AND source_doc=? AND COALESCE(source_document_id,-1)=COALESCE(?,-1) AND COALESCE(page,-1)=COALESCE(?,-1) AND locator=? LIMIT 1',(cid,content,source_type,source_doc,source_document_id,page,locator)).fetchone()
     if old:con.commit();con.close();return {'ok':True,'id':old['id'],'duplicate':True}
-    cur=con.execute('INSERT INTO user_marks(course_id,content,source_type,source_doc,page,locator,category,created_at) VALUES(?,?,?,?,?,?,?,?)',(cid,content,source_type,source_doc,page,locator,category,server.nowiso()));con.commit();mid=cur.lastrowid;con.close();return {'ok':True,'id':mid,'duplicate':False}
+    cur=con.execute('INSERT INTO user_marks(course_id,content,source_type,source_doc,source_document_id,page,timestamp_seconds,locator,category,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',(cid,content,source_type,source_doc,source_document_id,page,timestamp,locator,category,server.nowiso()));con.commit();mid=cur.lastrowid;con.close();return {'ok':True,'id':mid,'duplicate':False}
 
 @app.delete('/api/p/{pid}/courses/{cid}/marks/{mid}')
 def remove_mark(pid:int,cid:int,mid:int):
@@ -59,7 +76,6 @@ def remove_mark(pid:int,cid:int,mid:int):
     if not cur.rowcount:raise HTTPException(404,'표시한 내용을 찾지 못했어.')
     return {'ok':True}
 
-# Extend the core validator without weakening its size/coordinate limits.
 _core_clean=server.clean_annotation_items
 def clean_annotation_items(items):
     clean,encoded=_core_clean([{k:v for k,v in item.items() if k!='opacity'} if isinstance(item,dict) else item for item in items] if isinstance(items,list) else items)
@@ -86,7 +102,7 @@ async def save_annotations_with_marks(pid:int,cid:int,did:int,request:Request,pa
         for index,item in enumerate(items):
             if item.get('type')!='text':continue
             text=str(item.get('text') or '').strip()
-            if text:con.execute('INSERT INTO user_marks(course_id,content,source_type,source_doc,page,locator,category,created_at) VALUES(?,?,?,?,?,?,?,?)',(cid,text,'annotation',row['name'],page,prefix+str(index),'annotation_text',stamp))
+            if text:con.execute('INSERT INTO user_marks(course_id,content,source_type,source_doc,source_document_id,page,timestamp_seconds,locator,category,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',(cid,text,'annotation',row['name'],did,page,None,prefix+str(index),'annotation_text',stamp))
         con.commit()
     except Exception:con.rollback();raise
     finally:con.close()
