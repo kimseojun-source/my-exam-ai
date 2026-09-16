@@ -1,12 +1,12 @@
 // Cache only the public app shell. Private API responses and learning
 // documents always stay on the network and never enter Cache Storage.
-const CACHE='forest-shell-v14';
+const CACHE='forest-shell-v15';
 const ASSETS=[
  '/',
  '/offline.html',
  '/manifest.webmanifest',
- '/app.css?v=13',
- '/app.js?v=13',
+ '/app.css?v=14',
+ '/app.js?v=14',
  '/detail.js?v=4',
  '/install.js?v=1',
  '/icons/icon-192.png',

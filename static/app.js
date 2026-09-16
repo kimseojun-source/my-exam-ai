@@ -4,6 +4,17 @@ const originalJf=jf;
 jf=async function(url,opt={}){const match=url.match(/^\/api\/p\/(\d+)(?:\/courses\/(\d+))?/);const result=await originalJf(url,opt);if(match&&(Number(match[1])!==PID||(match[2]&&Number(match[2])!==CID)))throw Error('과목이 전환되어 이전 요청의 화면 갱신을 중단했어. 결과는 원래 과목에 보관돼.');return result;};
 loadProfiles=async function(){const ps=await jf('/api/profiles');profilesById=new Map(ps.map(p=>[p.id,p]));$('#profiles').innerHTML=ps.map(p=>`<button class="profile" data-profile-id="${p.id}"><div class="avatar">${esc((p.name||'U')[0])}</div><b>${esc(p.name)}</b><div class="mini">${p.is_owner?'소유자':'사용자'} · ${p.has_pin?'PIN 보호':'PIN 미설정'}</div></button>`).join('');$('#guestAdmin').classList.toggle('hidden',!PROFILE?.is_owner||ps.length>=2);};
 $('#profiles').addEventListener('click',e=>{const b=e.target.closest('[data-profile-id]');if(b)enterProfile(profilesById.get(+b.dataset.profileId));});
+let restoringCourse=false;
+function courseStatusText(course){const parts=[];if(course.due_count)parts.push(`복습 ${course.due_count}개`);if(course.document_count)parts.push(`자료 ${course.document_count}개`);if(course.last_score!=null)parts.push(`최근 ${course.last_score}점`);return parts.join(' · ')||(course.analyzed?'분석 완료':'자료를 추가해줘');}
+loadCourses=async function(){
+  const courses=await jf(`/api/p/${PID}/courses`);
+  $('#courses').innerHTML=courses.map(c=>`<button class="course ${c.id===CID?'active':''}" type="button" data-course-id="${c.id}"><span class="course-title"><b>${esc(c.name)}</b>${c.due_count?`<em>${c.due_count}</em>`:''}</span><span class="course-meta">${c.exam_date?`D${c.days_left>=0?'-'+c.days_left:'+'+Math.abs(c.days_left)}`:'시험일 미설정'} · ${esc(courseStatusText(c))}</span></button>`).join('')||'<p class="sub">아직 과목이 없어.</p>';
+  if(!CID&&!restoringCourse&&courses.length){
+    const saved=Number(sessionStorage.getItem(`forest_course_${PID}`)),target=courses.find(c=>c.id===saved)||courses.find(c=>c.due_count>0)||courses[0];
+    restoringCourse=true;try{await openCourse(target.id);}finally{restoringCourse=false;}
+  }
+};
+$('#courses').addEventListener('click',e=>{const course=e.target.closest('[data-course-id]');if(course)openCourse(+course.dataset.courseId);});
 function resetCourseView(){QUIZ=null;CARDS=[];CI=0;CB=false;COURSE=null;A={};for(const id of ['chat','ask','quizBody','sumBody','extBody','patternBody','cardBox','documentList','uploadStatus','lectureList','liveTranscript','lectureNote']){const el=$('#'+id);if(!el)continue;if(el.tagName==='TEXTAREA'||el.tagName==='INPUT')el.value='';else el.innerHTML='';}$('#files').value='';$('#lectureNote')?.classList.add('hidden');$('#coreDetailModal')?.classList.add('hidden');pane('dash',document.querySelector('.tab'));}
 openCourse=async function(id){const epoch=++viewEpoch;CID=id;resetCourseView();$('#ws').classList.add('hidden');try{const course=await jf(`/api/p/${PID}/courses/${id}`);if(epoch!==viewEpoch||CID!==id)return;COURSE=course;A=course.analysis||{};$('#empty').classList.add('hidden');$('#ws').classList.remove('hidden');$('#ctitle').textContent=course.name;render();await loadCourses();sessionStorage.setItem(`forest_course_${PID}`,String(id));}catch(e){if(epoch===viewEpoch)alert(e.message);}};
 const originalSwitch=switchProfile;switchProfile=async function(){++viewEpoch;resetCourseView();await originalSwitch();};const originalShow=showApp;showApp=function(){originalShow();$('#guestAdmin').classList.toggle('hidden',!PROFILE.is_owner||profilesById.size>=2);};const originalRender=render;

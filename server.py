@@ -497,8 +497,17 @@ def set_profile_pin(request:Request,pid:int,pin:str=Form("")):
 # ---------- courses ----------
 @app.get("/api/p/{pid}/courses")
 def list_courses(pid:int):
-    profile_row(pid);con=db();rows=con.execute("SELECT * FROM courses WHERE profile_id=? ORDER BY id DESC",(pid,)).fetchall();con.close()
-    return [{"id":r["id"],"name":r["name"],"exam_date":r["exam_date"],"analyzed":bool(json.loads(r["analysis_json"] or "{}")),"days_left":days_left(r["exam_date"])} for r in rows]
+    profile_row(pid);con=db();rows=con.execute("SELECT * FROM courses WHERE profile_id=? ORDER BY id DESC",(pid,)).fetchall()
+    summaries=[]
+    for r in rows:
+        analysis=json.loads(r["analysis_json"] or "{}")
+        document_count=con.execute("SELECT COUNT(*) FROM documents WHERE course_id=?",(r["id"],)).fetchone()[0]
+        last=con.execute("SELECT score FROM attempts WHERE course_id=? ORDER BY id DESC LIMIT 1",(r["id"],)).fetchone()
+        summaries.append({"id":r["id"],"name":r["name"],"exam_date":r["exam_date"],"analyzed":bool(analysis),
+          "days_left":days_left(r["exam_date"]),"document_count":document_count,
+          "due_count":sum(1 for x in due_info(r["id"],analysis.get("flashcards",[])) if x["is_due"]),
+          "last_score":round(last["score"]) if last else None})
+    con.close();return summaries
 
 @app.post("/api/p/{pid}/courses")
 def create_course(pid:int,name:str=Form("새 과목"),exam_date:str=Form("")):

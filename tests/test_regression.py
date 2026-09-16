@@ -93,6 +93,19 @@ def test_backup_and_snapshot_preserve_existing_records():
  assert c.get(base).headers['cache-control']=='no-store'
  assert c.get('/').status_code==200
 
+def test_course_list_exposes_resume_summary_without_cross_profile_data():
+ c=TestClient(server.app);cid=setup_course(c,'Resume Course');base=f'/api/p/1/courses/{cid}'
+ c.post(base+'/documents',files={'files':('lecture.pdf',pdf_bytes(),'application/pdf')})
+ assert c.post(base+'/analyze').status_code==200
+ item=next(x for x in c.get('/api/p/1/courses').json() if x['id']==cid)
+ assert item['document_count']==1 and item['due_count']>0 and item['last_score'] is None and item['analyzed']
+ profiles=c.get('/api/profiles').json();existing=next((p for p in profiles if not p['is_owner']),None)
+ if existing:guest=existing['id'];pin='1234'
+ else:guest=c.post('/api/profiles',data={'name':'Resume Guest','pin':'6789'}).json()['id'];pin='6789'
+ assert c.post(f'/api/profiles/{guest}/verify',data={'pin':pin}).status_code==200
+ assert c.get('/api/p/1/courses').status_code==403
+ assert c.get(f'/api/p/{guest}/courses').json()==[]
+
 def test_vision_request_schema_and_rotation(monkeypatch):
  class Responses:
   def create(self,**kwargs):
