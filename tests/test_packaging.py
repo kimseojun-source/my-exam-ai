@@ -46,7 +46,7 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v11" in script
+    assert "forest-shell-v12" in script
     for asset in ["/app.css?v=11", "/app.js?v=10", "/detail.js?v=4", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
@@ -56,8 +56,12 @@ def test_pwa_offline_cache_contains_only_public_shell():
 
 def test_installed_pwa_has_branded_launch_animation():
     html = (ROOT / "static/index.html").read_text()
-    assert "standalone-launch" in html
-    assert 'id="launchSplash"' in html
-    assert "navigator.standalone===true" in html
+    assert 'id="splash"' in html
+    assert "For your" in html
+    assert "Ever-Smarter" in html
+    assert "Tomorrow" in html
+    assert "animation:splashOut .38s ease 1.7s forwards" in html
+    assert "animation-delay:.22s" in html
+    assert "animation-delay:.44s" in html
+    assert "animation:brandIn .45s" in html
     assert "prefers-reduced-motion:reduce" in html
-    assert "Math.max(0,900-" in html
