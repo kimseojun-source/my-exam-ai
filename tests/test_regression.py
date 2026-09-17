@@ -168,6 +168,9 @@ def test_recording_cancel_removes_draft_and_transcript_but_not_saved_recording()
  saved=c.post(base+'/lectures',json={'title':'Keep recording'}).json()['id']
  assert c.post(base+f'/lectures/{saved}/audio',data={'duration_seconds':'3'},files={'audio':('lecture.webm',b'valid-recording-audio','audio/webm')}).status_code==200
  assert c.delete(base+f'/lectures/{saved}').status_code==409
+ saved_path=Path(forest_app.lecture_row(1,cid,saved)['audio_path']);assert saved_path.exists()
+ assert c.delete(base+f'/lectures/{saved}?confirm_saved=true').status_code==200
+ assert not saved_path.exists() and not c.get(base+'/lectures').json()['lectures']
 
 def test_uploaded_recording_transcribes_and_builds_student_study_pack(monkeypatch):
  c=TestClient(server.app);cid=setup_course(c,'Uploaded Lecture');base=f'/api/p/1/courses/{cid}'
