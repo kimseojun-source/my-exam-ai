@@ -54,6 +54,22 @@ def test_document_preview_annotations_and_original_preserved():
  assert c.put(base+f'/documents/{did}/annotations?page=1',json={'items':[{'type':'stroke','color':'#d6ff00','width':12,'opacity':0,'points':[[.1,.2]]}]}).status_code==400
  other=setup_course(c,'Other')
  assert c.get(f'/api/p/1/courses/{other}/documents/{did}/annotations?page=1').status_code==404
+ path=server.owned_document(1,cid,did)[1];assert path.exists()
+ assert c.delete(base+f'/documents/{did}').status_code==409
+ assert c.delete(base+f'/documents/{did}?confirm=true').status_code==200
+ assert not path.exists() and c.get(base+f'/documents/{did}/file').status_code==404
+
+def test_pen_handwriting_becomes_a_course_mark(monkeypatch):
+ class Responses:
+  def create(self,**kwargs):return type('Result',(),{'output_text':'수요 증가'})()
+ class Api:responses=Responses()
+ monkeypatch.setattr(server,'client',lambda:Api());monkeypatch.setattr(server,'vision_model',lambda:'vision-test')
+ c=TestClient(server.app);cid=setup_course(c,'Handwriting');base=f'/api/p/1/courses/{cid}'
+ did=c.post(base+'/documents',files={'files':('notes.pdf',pdf_bytes(),'application/pdf')}).json()['added'][0]['id']
+ stroke={'type':'stroke','color':'#17231e','width':4,'opacity':1,'points':[[.1,.2],[.2,.25],[.3,.2]]}
+ saved=c.put(base+f'/documents/{did}/annotations?page=1',json={'items':[stroke]});assert saved.status_code==200,saved.text
+ marks=c.get(base+'/marks').json()['marks']
+ assert any(x['category']=='annotation_handwriting' and x['content']=='수요 증가' for x in marks)
 
 def test_analysis_and_tutor_receive_only_current_subject(monkeypatch):
  c=TestClient(server.app);cid=setup_course(c,'Physics');base=f'/api/p/1/courses/{cid}'

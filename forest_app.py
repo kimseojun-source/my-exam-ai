@@ -1,4 +1,6 @@
+import base64
 import hashlib
+import io
 import json
 import mimetypes
 import os
@@ -9,6 +11,7 @@ from fastapi import BackgroundTasks, File, Form, HTTPException, Request, UploadF
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.routing import Mount
+from PIL import Image, ImageDraw
 import server
 
 app = server.app
@@ -94,6 +97,27 @@ def clean_importance(value):
 
 def mark_rows(cid):
     con=server.db();ensure_marks(con);rows=[dict(r) for r in con.execute('SELECT * FROM user_marks WHERE course_id=? ORDER BY id DESC',(cid,)).fetchall()];con.commit();con.close();return rows
+
+def recognize_handwriting(cid,did,page,document_name,items):
+    strokes=[x for x in items if x.get('type')=='stroke' and float(x.get('opacity',1))>=.65 and len(x.get('points') or [])>=2]
+    api=server.client()
+    if not strokes or not api:return
+    width,height=1400,1900;image=Image.new('RGB',(width,height),'white');draw=ImageDraw.Draw(image)
+    for stroke in strokes:
+        points=[(round(p[0]*width),round(p[1]*height)) for p in stroke['points']]
+        draw.line(points,fill='#111111',width=max(2,round(float(stroke.get('width',3))*2)),joint='curve')
+    output=io.BytesIO();image.save(output,format='PNG');data='data:image/png;base64,'+base64.b64encode(output.getvalue()).decode()
+    try:
+        response=api.responses.create(model=server.vision_model(),input=[{'role':'user','content':[
+            {'type':'input_text','text':'흰 배경 위 사용자가 펜으로 직접 쓴 손글씨만 판독해. 밑줄, 도형, 낙서, 알아볼 수 없는 선은 무시해. 읽을 수 있는 단어나 문장이 없으면 NONE만 출력하고, 있으면 손글씨 내용만 원문 그대로 출력해.'},
+            {'type':'input_image','image_url':data,'detail':'high'}]}])
+        text=str(getattr(response,'output_text','') or '').strip()
+    except Exception:return
+    if not text or text.upper()=='NONE':return
+    con=server.db();ensure_marks(con);locator=f'annotation-ocr:{did}:{page}'
+    con.execute("DELETE FROM user_marks WHERE course_id=? AND source_type='annotation' AND locator=?",(cid,locator))
+    con.execute('INSERT INTO user_marks(course_id,content,source_type,source_doc,source_document_id,page,timestamp_seconds,locator,category,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',(cid,text[:10000],'annotation',document_name,did,page,None,locator,'annotation_handwriting',server.nowiso()))
+    con.commit();con.close()
 
 _startup_con=server.db();ensure_marks(_startup_con);ensure_lectures(_startup_con);_startup_con.commit();_startup_con.close()
 
@@ -431,13 +455,13 @@ def clean_annotation_items(items):
 annotation_path='/api/p/{pid}/courses/{cid}/documents/{did}/annotations'
 app.router.routes[:]=[r for r in app.router.routes if not (getattr(r,'path',None)==annotation_path and 'PUT' in getattr(r,'methods',set()))]
 @app.put(annotation_path)
-async def save_annotations_with_marks(pid:int,cid:int,did:int,request:Request,page:int=1):
+async def save_annotations_with_marks(pid:int,cid:int,did:int,request:Request,background_tasks:BackgroundTasks,page:int=1):
     row,_=server.owned_document(pid,cid,did);page=server.annotation_page(row,page)
     try:payload=await request.json()
     except Exception:raise HTTPException(400,'필기 데이터를 읽지 못했어.')
     items,encoded=clean_annotation_items(payload.get('items') if isinstance(payload,dict) else None);stamp=server.nowiso();con=server.db();ensure_marks(con)
     try:
-        con.execute('BEGIN IMMEDIATE');con.execute('''INSERT INTO document_annotations(document_id,page,data_json,updated_at) VALUES(?,?,?,?) ON CONFLICT(document_id,page) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at''',(did,page,encoded,stamp));prefix=f'annotation:{did}:{page}:';con.execute("DELETE FROM user_marks WHERE course_id=? AND source_type='annotation' AND locator LIKE ?",(cid,prefix+'%'))
+        con.execute('BEGIN IMMEDIATE');con.execute('''INSERT INTO document_annotations(document_id,page,data_json,updated_at) VALUES(?,?,?,?) ON CONFLICT(document_id,page) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at''',(did,page,encoded,stamp));prefix=f'annotation:{did}:{page}:';con.execute("DELETE FROM user_marks WHERE course_id=? AND source_type='annotation' AND (locator LIKE ? OR locator=?)",(cid,prefix+'%',f'annotation-ocr:{did}:{page}'))
         for index,item in enumerate(items):
             if item.get('type')!='text':continue
             text=str(item.get('text') or '').strip()
@@ -445,7 +469,26 @@ async def save_annotations_with_marks(pid:int,cid:int,did:int,request:Request,pa
         con.commit()
     except Exception:con.rollback();raise
     finally:con.close()
+    if any(x.get('type')=='stroke' and float(x.get('opacity',1))>=.65 for x in items):background_tasks.add_task(recognize_handwriting,cid,did,page,row['name'],items)
     return {'ok':True,'page':page,'count':len(items),'updated_at':stamp,'text_marks':sum(1 for x in items if x.get('type')=='text')}
+
+@app.delete('/api/p/{pid}/courses/{cid}/documents/{did}')
+def delete_document(pid:int,cid:int,did:int,confirm:bool=False):
+    if not confirm:raise HTTPException(409,'자료 삭제 확인이 필요해.')
+    row,path=server.owned_document(pid,cid,did);con=server.db();ensure_marks(con)
+    try:
+        con.execute('BEGIN IMMEDIATE')
+        con.execute('DELETE FROM user_marks WHERE course_id=? AND source_document_id=?',(cid,did))
+        con.execute('DELETE FROM document_annotations WHERE document_id=?',(did,))
+        cur=con.execute('DELETE FROM documents WHERE id=? AND course_id=?',(did,cid))
+        con.execute("UPDATE courses SET analysis_json='{}',profile_json='{}' WHERE id=?",(cid,))
+        con.execute('DELETE FROM exam_patterns WHERE course_id=?',(cid,))
+        con.commit()
+    except Exception:con.rollback();raise
+    finally:con.close()
+    if not cur.rowcount:raise HTTPException(404,'이미 삭제된 자료야.')
+    if path.is_relative_to(server.DATA_ROOT.resolve()):path.unlink(missing_ok=True)
+    return {'ok':True,'deleted':did,'name':row['name'],'analysis_invalidated':True}
 
 app.router.routes[:]=[r for r in app.router.routes if getattr(r,'path',None)!='/api/p/{pid}/backup']
 @app.get('/api/p/{pid}/backup')

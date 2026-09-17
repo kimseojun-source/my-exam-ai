@@ -82,6 +82,8 @@ def test_recording_ui_and_native_microphone_bridge():
     assert "toggleLectureRecordingPause" in script
     assert "data-delete-lecture" in script
     assert "confirm_saved=true" in script
+    assert "data-delete-document" in script
+    assert "?confirm=true" in script
     assert "createDataChannel('oai-events')" in script
     assert "/v1/realtime/calls" in script
     assert "RESOURCE_AUDIO_CAPTURE" in activity
