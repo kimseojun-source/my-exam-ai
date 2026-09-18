@@ -195,7 +195,7 @@ def client():
     key=os.getenv("OPENAI_API_KEY","").strip()
     if not key:return None
     from openai import OpenAI
-    return OpenAI(api_key=key, timeout=float(os.getenv("OPENAI_TIMEOUT","75")), max_retries=0)
+    return OpenAI(api_key=key, timeout=float(os.getenv("OPENAI_TIMEOUT","35")), max_retries=0)
 
 def model_name(): return os.getenv("OPENAI_MODEL","gpt-5.6")
 def vision_model(): return os.getenv("OPENAI_VISION_MODEL",model_name())
