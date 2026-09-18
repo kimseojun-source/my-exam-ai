@@ -754,7 +754,14 @@ def analyze(pid:int,cid:int):
 
 대표 자료:
 {material}"""
-    a=json_call(prompt,ANALYSIS_SCHEMA)
+    try:
+        a=json_call(prompt,ANALYSIS_SCHEMA)
+    except Exception as e:
+        # A slow/unavailable model must never leave a student staring at a
+        # spinner. The deterministic source-only analysis is immediately usable
+        # and remains grounded in the uploaded material.
+        logging.warning("Fast analysis AI unavailable; using source fallback: %r",e)
+        a=None
     if a is None:a=fallback_analysis(c["name"],chunks)
     a["_source_fingerprint"]=fingerprint
     a["_cache_hit"]=False
