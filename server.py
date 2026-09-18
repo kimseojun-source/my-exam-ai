@@ -737,11 +737,23 @@ def analyze(pid:int,cid:int):
     if not docs:raise HTTPException(400,"먼저 강의자료를 넣어줘.")
     chunks=chunks_from_docs(docs)
     if not chunks:raise HTTPException(400,"읽을 수 있는 자료가 아직 없어. 이미지·스캔 PDF는 AI 연결 후 다시 읽기를 눌러줘.")
-    # Keep the first analysis request compact. Huge 200k+ character prompts were
-    # the main source of long waits on mobile. Retrieve representative chunks
-    # and cap the prompt; the original documents stay stored unchanged.
+
+    # Incremental cache: if the exact set/content of study documents has already
+    # been analyzed, return the saved result immediately without another AI call.
+    doc_fingerprint=hashlib.sha256(json.dumps([
+        [d["id"],d["name"],d["document_type"],d["total_pages"],
+         hashlib.sha256(json.dumps(d["pages"],ensure_ascii=False,separators=(",",":")).encode()).hexdigest()]
+        for d in docs
+    ],ensure_ascii=False,separators=(",",":")).encode()).hexdigest()
+    cached=json.loads(c["analysis_json"] or "{}")
+    if cached and cached.get("_source_fingerprint")==doc_fingerprint:
+        cached["_cache_hit"]=True
+        return cached
+
+    # Fast first-pass analysis: retrieve a small representative working set.
+    # Full originals remain stored and available to tutor/quiz retrieval.
     seed=(c["name"]+" "+(" ".join(d["name"] for d in docs)))
-    selected=retrieve(chunks,seed,k=int(os.getenv("ANALYZE_CHUNKS","56")))
+    selected=retrieve(chunks,seed,k=int(os.getenv("ANALYZE_CHUNKS","32")))
     material="\n\n".join(f"[{x['doc']} p.{x['page']}]\n{x['text']}" for x in selected)
     prompt=f"""현재 네임스페이스 profile:{pid}/course:{cid}, 과목 '{c['name']}'만 분석한다.
 다른 과목/사용자 자료는 존재하지 않는 것으로 취급한다.
@@ -753,7 +765,7 @@ PDF 시각 보강 텍스트([시각자료/스캔 보강])도 강의자료의 해
 시험까지 남은 일수: {days_left(c['exam_date']) if c['exam_date'] else '미설정'}
 
 자료:
-{material[:90000]}"""
+{material[:52000]}"""
     a=json_call(prompt,ANALYSIS_SCHEMA)
     if a is None:a=fallback_analysis(c["name"],chunks)
     else:
@@ -772,6 +784,8 @@ PDF 시각 보강 텍스트([시각자료/스캔 보강])도 강의자료의 해
 핵심:{json.dumps(a.get('must_understand',[])[:10],ensure_ascii=False)}""",ext_schema,web=True)
                 if ext:a["external_knowledge"]=ext["external_knowledge"]
             except Exception:pass
+    a["_source_fingerprint"]=doc_fingerprint
+    a["_cache_hit"]=False
     con=db();con.execute("UPDATE courses SET profile_json=?,analysis_json=? WHERE id=? AND profile_id=?",(json.dumps(a.get("course_profile",{}),ensure_ascii=False),json.dumps(a,ensure_ascii=False),cid,pid));con.commit();con.close()
     return a
 
