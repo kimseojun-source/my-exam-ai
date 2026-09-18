@@ -65,7 +65,30 @@ window.addEventListener('beforeunload',e=>{if(!ANNO?.dirty)return;e.preventDefau
 async function downloadFile(url,name){if(!ACCESS){const a=document.createElement('a');a.href=url;if(name)a.download=name;document.body.appendChild(a);a.click();a.remove();return;}const r=await fetch(url,{headers:{'X-App-Code':ACCESS}});if(!r.ok)throw Error('파일 다운로드에 실패했어.');const blob=await r.blob(),href=URL.createObjectURL(blob),a=document.createElement('a');a.href=href;a.download=name||'FOR-EST-document';a.click();setTimeout(()=>URL.revokeObjectURL(href),30000);}
 backup=async function(){try{await downloadFile(`/api/p/${PID}/backup`,`FOR-EST-${PROFILE.name}-backup.json`);}catch(e){alert(e.message);}};
 uploadDocs=async function(){const files=[...$('#files').files],pid=PID,cid=CID;if(!files.length)return alert('PDF 또는 이미지를 골라줘.');if(files.length>15)return alert('한 번에 15개까지 올릴 수 있어.');if(files.some(f=>f.size>40*1024*1024))return alert('파일당 40MB까지 올릴 수 있어.');const fd=new FormData();files.forEach(f=>fd.append('files',f));fd.append('document_type',$('#dtype').value);const button=document.querySelector('[onclick="uploadDocs()"]');await busy(button,async()=>{$('#uploadStatus').textContent='자료를 업로드하고 읽는 중이야. 이미지·스캔 PDF는 시간이 조금 걸릴 수 있어.';try{const x=await jf(`/api/p/${pid}/courses/${cid}/documents`,{method:'POST',body:fd});if(PID!==pid||CID!==cid)return;const messages=[...x.added.map(d=>`${d.name}: ${d.warning||'추가 완료'}`),...(x.skipped||[]).map(d=>`${d.name}: 이미 보관된 자료`),...(x.errors||[]).map(d=>`${d.name}: ${d.message}`)];await openCourse(cid);$('#uploadStatus').textContent=messages.join('\n');}catch(e){if(PID===pid&&CID===cid)$('#uploadStatus').textContent=e.message;throw e;}});};
-for(const name of ['analyze','makeQuiz','analyzePattern','gradeQuiz','askTutor']){const original=window[name];window[name]=async function(){const b=document.querySelector(`[onclick="${name}()"]`);return busy(b,()=>original());};}
+for(const name of ['makeQuiz','analyzePattern','gradeQuiz','askTutor']){const original=window[name];window[name]=async function(){const b=document.querySelector(`[onclick="${name}()"]`);return busy(b,()=>original());};}
+{
+  const originalAnalyze=window.analyze;
+  let analysisRunning=false;
+  window.analyze=async function(){
+    if(analysisRunning)return;
+    analysisRunning=true;
+    const button=document.querySelector('[onclick="analyze()"]');
+    const originalText=button?.textContent||'⚡ 자동 분석';
+    const startedAt=Date.now();
+    const formatElapsed=()=>{const seconds=Math.floor((Date.now()-startedAt)/1000);return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;};
+    const renderProgress=()=>{
+      const elapsed=formatElapsed();
+      if(button){button.disabled=true;button.textContent=`분석 중 ${elapsed}`;}
+      const status=$('#dashBody');
+      if(status)status.innerHTML=`<div role="status" aria-live="polite"><b>자료를 읽고 시험 핵심·회상카드·문제를 만드는 중…</b><p class="mini">경과 ${elapsed} · 자료 양에 따라 1분 이상 걸릴 수 있어. 이 화면을 그대로 두면 완료 후 자동으로 바뀌어.</p></div>`;
+    };
+    renderProgress();
+    const timer=setInterval(renderProgress,1000);
+    try{return await originalAnalyze();}
+    catch(e){const status=$('#dashBody');if(status)status.innerHTML=`<div role="alert"><b>자동분석을 완료하지 못했어.</b><p class="mini">${esc(e.message)} · 잠시 후 다시 눌러도 중복 요청되지 않아.</p></div>`;alert(e.message);}
+    finally{clearInterval(timer);analysisRunning=false;if(button){button.disabled=false;button.textContent=originalText;}}
+  };
+}
 askTutor=async function(){const q=$('#ask').value.trim(),pid=PID,cid=CID;if(!q)return;const button=document.querySelector('[onclick="askTutor()"]');await busy(button,async()=>{$('#chat').innerHTML+=`<div class="bubble me">${esc(q)}</div><div class="bubble ai" id="thinking">현재 과목 자료에서 근거를 찾는 중…</div>`;$('#ask').value='';try{const x=await jf(`/api/p/${pid}/courses/${cid}/tutor`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})});$('#thinking')?.remove();$('#chat').innerHTML+=`<div class="bubble ai">${esc(x.answer)}</div>`;$('#chat').scrollTop=$('#chat').scrollHeight;}catch(e){if(PID===pid&&CID===cid){$('#thinking')?.remove();$('#ask').value=q;}throw e;}});};
 
 let REC=null,lectureAudioUrl=null;
