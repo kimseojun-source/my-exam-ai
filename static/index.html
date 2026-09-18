@@ -214,8 +214,24 @@ async function uploadDocs(){
 }
 
 async function analyze(){
-  try{$("#dashBody").innerHTML="<b>현재 사용자·현재 과목만 격리해서 분석 중…</b>";A=await jf(`/api/p/${PID}/courses/${CID}/analyze`,{method:"POST"});await openCourse(CID)}
-  catch(e){alert(e.message)}
+  if(!CID)return;
+  const cid=CID,started=performance.now(),old=A;
+  $("#dashBody").innerHTML=`<div class="notice"><b>⚡ 핵심 분석 시작</b><div class="sub">기존 결과는 유지하고 새 자료만 확인하고 있어.</div></div>`;
+  // Never blank the student's workspace while the network/model is working.
+  if(old?.overview)setTimeout(()=>{if(CID===cid&&A===old)render()},120);
+  try{
+    const next=await jf(`/api/p/${PID}/courses/${cid}/analyze`,{method:"POST"});
+    if(CID!==cid)return;
+    A=next;COURSE.analysis=next;render();
+    // Refresh course badges without re-fetching the whole course and making the
+    // completed analysis feel slower than it is.
+    loadCourses().catch(()=>{});
+    const ms=Math.round(performance.now()-started);
+    console.info("FOR'EST analysis",ms+"ms",next._cache_hit?"cache":"ai");
+  }catch(e){
+    if(CID===cid&&old?.overview){A=old;render()}
+    alert(e.message)
+  }
 }
 
 function render(){
