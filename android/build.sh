@@ -25,10 +25,10 @@ elif [[ -n "${FOREST_KEYSTORE_B64:-}" ]]; then
 fi
 if [[ -n "$KEYSTORE" ]]; then
  export FOREST_KEYSTORE_PASSWORD="${FOREST_KEYSTORE_PASSWORD:-}"
- "$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass env:FOREST_KEYSTORE_PASSWORD --out "$OUT/FOREST-9.2.0.apk" "$OUT/aligned.apk"
- "$BT/apksigner" verify --verbose --print-certs "$OUT/FOREST-9.2.0.apk"
+ "$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass env:FOREST_KEYSTORE_PASSWORD --out "$OUT/FOREST-9.3.0.apk" "$OUT/aligned.apk"
+ "$BT/apksigner" verify --verbose --print-certs "$OUT/FOREST-9.3.0.apk"
  [[ "$KEYSTORE" != "$OUT/signing.p12" ]] || rm "$KEYSTORE"
 else
- cp "$OUT/aligned.apk" "$OUT/FOREST-9.2.0-unsigned.apk"
+ cp "$OUT/aligned.apk" "$OUT/FOREST-9.3.0-unsigned.apk"
 fi
 "$BT/aapt2" dump badging "$OUT/base.apk"

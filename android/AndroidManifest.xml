@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.myexamai.app" android:versionCode="920" android:versionName="9.2.0">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.myexamai.app" android:versionCode="930" android:versionName="9.3.0">
  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/>
  <uses-permission android:name="android.permission.INTERNET"/>
  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>

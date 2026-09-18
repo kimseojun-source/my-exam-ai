@@ -19,10 +19,10 @@ def test_builder_serves_only_signed_release_and_keeps_signer_on_volume():
     assert 'FOREST_SOURCE_COMMIT:-main' in start
     assert '/data' in start
     assert 'forest-release.p12' in start
-    assert 'FOREST-9.2.0.apk' in start
+    assert 'FOREST-9.3.0.apk' in start
     assert 'FOREST_KEYSTORE_PATH' in build
     assert 'apksigner' in build
-    assert 'FOREST-9.2.0.apk' in build
+    assert 'FOREST-9.3.0.apk' in build
 
 
 def test_ios_pwa_has_install_guidance_and_apple_metadata():
@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v17" in script
-    for asset in ["/app.css?v=16", "/app.js?v=16", "/detail.js?v=5", "/install.js?v=1"]:
+    assert "forest-shell-v18" in script
+    for asset in ["/app.css?v=17", "/app.js?v=17", "/detail.js?v=5", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
