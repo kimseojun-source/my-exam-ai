@@ -206,3 +206,17 @@ def test_uploaded_recording_transcribes_and_builds_student_study_pack(monkeypatc
  data=pack.json();assert len(data['questions'])>=1 and any(x['timestamp_seconds']==8 for x in data['key_points'])
  profile=c.get(base+'/learning-profile').json()
  assert profile['evidence']['lecture_count']>=1 and profile['recommendations']
+
+
+def test_stable_subject_analysis_uses_one_ai_round_trip(monkeypatch):
+ c=TestClient(server.app);cid=setup_course(c,'Stable Subject');base=f'/api/p/1/courses/{cid}'
+ c.post(base+'/documents',files={'files':('stable.pdf',pdf_bytes('Stable material with definitions, concepts, examples, and enough detail for analysis.'),'application/pdf')})
+ calls=[]
+ def fake_json(prompt,schema,web=False):
+  calls.append({'prompt':prompt,'web':web})
+  result=server.fallback_analysis('Stable Subject',server.chunks_from_docs(server.course_docs(1,cid)))
+  result['course_profile']['freshness_needed']=False
+  return result
+ monkeypatch.setattr(server,'json_call',fake_json)
+ assert c.post(base+'/analyze').status_code==200
+ assert len(calls)==1 and calls[0]['web'] is False

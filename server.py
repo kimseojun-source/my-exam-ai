@@ -779,14 +779,19 @@ PDF 시각 보강 텍스트([시각자료/스캔 보강])도 강의자료의 해
         ext_schema={"type":"object","properties":{"external_knowledge":{"type":"array","items":{"type":"object","properties":{
           "title":{"type":"string"},"text":{"type":"string"},"why":{"type":"string"},"source_type":{"type":"string","enum":["model_knowledge","web"]}
         },"required":["title","text","why","source_type"],"additionalProperties":False}}},"required":["external_knowledge"],"additionalProperties":False}
-        try:
-            ext=json_call(f"""과목 '{c['name']}'의 현재 강의 범위를 이해하는 데 꼭 필요한 보충지식만 최대 8개.
+        # The core response already contains grounded external_knowledge. A second
+        # sequential model call is useful only for subjects that genuinely need
+        # current information; skipping it for stable subjects cuts the common
+        # analysis path from two AI round trips to one.
+        if freshness:
+            try:
+                ext=json_call(f"""과목 '{c['name']}'의 현재 강의 범위를 이해하는 데 꼭 필요한 보충지식만 최대 8개.
 시험범위를 쓸데없이 넓히지 말고 강의자료와 명확히 분리해.
 최신성이 필요한 분야에서만 웹 정보를 써.
 강의 개요:{a.get('overview','')}
-핵심:{json.dumps(a.get('must_understand',[])[:12],ensure_ascii=False)}""",ext_schema,web=bool(freshness))
-            if ext:a["external_knowledge"]=ext["external_knowledge"]
-        except Exception:pass
+핵심:{json.dumps(a.get('must_understand',[])[:12],ensure_ascii=False)}""",ext_schema,web=True)
+                if ext:a["external_knowledge"]=ext["external_knowledge"]
+            except Exception:pass
     con=db();con.execute("UPDATE courses SET profile_json=?,analysis_json=? WHERE id=? AND profile_id=?",(json.dumps(a.get("course_profile",{}),ensure_ascii=False),json.dumps(a,ensure_ascii=False),cid,pid));con.commit();con.close()
     return a
 
