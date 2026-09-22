@@ -47,12 +47,26 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v21" in script
+    assert "forest-shell-v22" in script
     for asset in ["/app.css?v=17", "/app.js?v=19", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
     assert "caches.match('/')||caches.match('/offline.html')" in script
+
+
+def test_study_first_workspace_is_cached_and_keeps_management_in_drawer():
+    html = (ROOT / "static/index.html").read_text()
+    shell = (ROOT / "static/workspace.js").read_text()
+    styles = (ROOT / "static/workspace.css").read_text()
+    assert '/workspace.js?v=1' in html
+    assert '/workspace.css?v=1' in html
+    assert "studyDrawer" in shell
+    assert "sourceDocument" in shell
+    assert "forest_reading_" in shell
+    assert "openAnnotator(doc.id,doc.pages,doc.name,page)" in shell
+    assert "@media(max-width:700px)" in styles
+    assert "data-view=source" in styles
 
 
 def test_installed_pwa_has_branded_launch_animation():
