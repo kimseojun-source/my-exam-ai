@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v20" in script
-    for asset in ["/app.css?v=17", "/app.js?v=18", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v21" in script
+    for asset in ["/app.css?v=17", "/app.js?v=19", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -126,7 +126,8 @@ def test_mobile_forms_core_actions_and_timecoded_transcript():
     assert "data-core-practice" in detail
     assert "data-core-source" in detail
     assert "data-core-ask" in detail
-    assert "data-cancel-analysis" in app
+    assert 'id="cancelAnalysisButton"' in html
+    assert "cancelCurrentAnalysis" in app
     assert "AbortController" in app
     assert ".core-detail-layout.has-source" in detail
     assert "loadInlineSource" in detail

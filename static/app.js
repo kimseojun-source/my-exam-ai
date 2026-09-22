@@ -69,6 +69,9 @@ for(const name of ['makeQuiz','analyzePattern','gradeQuiz','askTutor']){const or
 {
   const originalAnalyze=window.analyze;
   let analysisRunning=false;
+  const cancelButton=$('#cancelAnalysisButton');
+  let cancelCurrentAnalysis=null;
+  cancelButton?.addEventListener('click',()=>cancelCurrentAnalysis?.());
   window.analyze=async function(){
     if(analysisRunning)return;
     analysisRunning=true;
@@ -76,19 +79,29 @@ for(const name of ['makeQuiz','analyzePattern','gradeQuiz','askTutor']){const or
     const originalText=button?.textContent||'⚡ 자동 분석';
     const controller=new AbortController(),runId=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random()}`).replace(/[^A-Za-z0-9_-]/g,'');
     let cancelled=false;
+    const requestCancel=()=>{
+      if(cancelled||!analysisRunning)return;
+      cancelled=true;controller.abort();
+      const headers=ACCESS?{'X-App-Code':ACCESS}:{};
+      fetch(`/api/p/${PID}/courses/${CID}/analyze/${runId}/cancel`,{method:'POST',headers}).catch(()=>{});
+      const status=$('#dashBody');
+      if(status)status.innerHTML='<div class="notice"><b>분석을 취소했어.</b><div class="sub">기존 분석 결과와 자료는 그대로 유지돼.</div></div>';
+    };
+    cancelCurrentAnalysis=requestCancel;
+    if(cancelButton){cancelButton.disabled=false;cancelButton.setAttribute('aria-disabled','false');cancelButton.classList.add('active');}
     const startedAt=Date.now();
     const formatElapsed=()=>{const seconds=Math.floor((Date.now()-startedAt)/1000);return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;};
     const renderProgress=()=>{
       const elapsed=formatElapsed();
       if(button){button.disabled=true;button.textContent=`분석 중 ${elapsed}`;}
       const status=$('#dashBody');
-      if(status){status.innerHTML=`<div role="status" aria-live="polite"><b>자료를 읽고 시험 핵심·회상카드·문제를 만드는 중…</b><p class="mini">경과 ${elapsed} · AI 응답은 최대 10초만 기다려.</p><button type="button" class="ghost" data-cancel-analysis>분석 취소</button></div>`;status.querySelector('[data-cancel-analysis]').onclick=()=>{if(cancelled)return;cancelled=true;controller.abort();const headers=ACCESS?{'X-App-Code':ACCESS}:{};fetch(`/api/p/${PID}/courses/${CID}/analyze/${runId}/cancel`,{method:'POST',headers}).catch(()=>{});status.innerHTML='<div class="notice"><b>분석을 취소했어.</b><div class="sub">기존 분석 결과와 자료는 그대로 유지돼.</div></div>';};}
+      if(status){status.innerHTML=`<div role="status" aria-live="polite"><b>자료를 읽고 시험 핵심·회상카드·문제를 만드는 중…</b><p class="mini">경과 ${elapsed} · 위의 빨간 분석 취소 버튼으로 언제든 멈출 수 있어.</p></div>`;}
     };
     renderProgress();
     const timer=setInterval(renderProgress,1000);
     try{return await originalAnalyze({signal:controller.signal,runId});}
     catch(e){if(cancelled||e?.name==='AbortError')return;const status=$('#dashBody');if(status)status.innerHTML=`<div role="alert"><b>자동분석을 완료하지 못했어.</b><p class="mini">${esc(e.message)} · 잠시 후 다시 눌러도 중복 요청되지 않아.</p></div>`;alert(e.message);}
-    finally{clearInterval(timer);analysisRunning=false;if(button){button.disabled=false;button.textContent=originalText;}}
+    finally{clearInterval(timer);analysisRunning=false;cancelCurrentAnalysis=null;if(button){button.disabled=false;button.textContent=originalText;}if(cancelButton){cancelButton.disabled=true;cancelButton.setAttribute('aria-disabled','true');cancelButton.classList.remove('active');}}
   };
 }
 askTutor=async function(){const q=$('#ask').value.trim(),pid=PID,cid=CID;if(!q)return;const button=document.querySelector('[onclick="askTutor()"]');await busy(button,async()=>{$('#chat').innerHTML+=`<div class="bubble me">${esc(q)}</div><div class="bubble ai" id="thinking">현재 과목 자료에서 근거를 찾는 중…</div>`;$('#ask').value='';try{const x=await jf(`/api/p/${pid}/courses/${cid}/tutor`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})});$('#thinking')?.remove();$('#chat').innerHTML+=`<div class="bubble ai">${esc(x.answer)}</div>`;$('#chat').scrollTop=$('#chat').scrollHeight;}catch(e){if(PID===pid&&CID===cid){$('#thinking')?.remove();$('#ask').value=q;}throw e;}});};

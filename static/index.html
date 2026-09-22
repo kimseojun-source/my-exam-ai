@@ -81,7 +81,10 @@ label{font-size:12px;font-weight:850;display:block;margin:10px 0 5px}.row{displa
         <div class="card">
           <div class="row" style="align-items:center">
             <div><h1 id="ctitle"></h1><div id="meta" class="sub"></div><div id="ns" class="namespace hidden"></div></div>
-            <button class="dark" onclick="analyze()">⚡ 자동 분석</button>
+            <div class="analysis-controls" aria-label="자동 분석 제어">
+              <button id="analyzeButton" class="dark" onclick="analyze()">⚡ 자동 분석</button>
+              <button id="cancelAnalysisButton" class="analysis-cancel" type="button" disabled aria-disabled="true">분석 취소</button>
+            </div>
           </div>
           <label>자료 종류</label>
           <select id="dtype"><option value="lecture">강의자료</option><option value="textbook">교재/참고자료</option><option value="notes">필기/정리</option><option value="past_exam">기출문제/족보</option></select>
@@ -338,4 +341,4 @@ async function backup(){
 // Boot is owned by app.js so overrides and error handling are ready first.
 if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
 </script>
-<script src="/app.js?v=18"></script><script src="/detail.js?v=6"></script><script src="/install.js?v=1"></script></body></html>
+<script src="/app.js?v=19"></script><script src="/detail.js?v=6"></script><script src="/install.js?v=1"></script></body></html>
