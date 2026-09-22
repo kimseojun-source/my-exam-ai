@@ -102,7 +102,7 @@ def test_backup_and_snapshot_preserve_existing_records():
  c=TestClient(server.app);cid=setup_course(c);base=f'/api/p/1/courses/{cid}'
  c.post(base+'/documents',files={'files':('lecture.pdf',pdf_bytes(),'application/pdf')})
  before=c.get(base).json();server.snapshot_existing_database()
- assert (server.DATA_ROOT/'backups'/'before-9.2.0.sqlite3').exists()
+ assert (server.DATA_ROOT/'backups'/f'before-{server.APP_VERSION}.sqlite3').exists()
  assert c.get(base).json()==before
  backup=c.get('/api/p/1/backup').json()
  assert backup['format_version']==5 and 'text_json' in backup['documents'][0] and 'exam_patterns' in backup and 'lecture_sessions' in backup

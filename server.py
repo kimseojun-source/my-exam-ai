@@ -1,5 +1,5 @@
 
-import os, json, re, sqlite3, tempfile, math, hashlib, base64, secrets, io, logging, mimetypes
+import os, json, re, sqlite3, tempfile, math, hashlib, base64, secrets, io, logging, mimetypes, time
 from starlette.concurrency import run_in_threadpool
 from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
@@ -41,7 +41,7 @@ def get_session_secret():
 
 SESSION_SECRET=get_session_secret()
 IS_HTTPS=os.getenv("COOKIE_HTTPS_ONLY", "1" if os.getenv("RAILWAY_PROJECT_ID") else "0")=="1"
-APP_VERSION="9.2.0"
+APP_VERSION="9.3.0"
 app=FastAPI(title="FOR'EST",version=APP_VERSION)
 
 def nowiso(): return datetime.now().isoformat(timespec="seconds")
@@ -205,8 +205,14 @@ def json_call(prompt,schema,web=False):
     if not c:return None
     kw={"model":model_name(),"input":prompt,
         "text":{"format":{"type":"json_schema","name":"result","strict":True,"schema":schema}}}
+    # Automatic course analysis is latency-sensitive. Keep the deeper default
+    # reasoning behavior for quizzes, grading and other focused study tools.
+    if schema is globals().get("ANALYSIS_SCHEMA"):
+        kw["reasoning"]={"effort":os.getenv("OPENAI_ANALYSIS_REASONING","low")}
     if web: kw["tools"]=[{"type":"web_search"}]
-    r=c.responses.create(**kw)
+    started=time.monotonic()
+    try:r=c.responses.create(**kw)
+    finally:logging.info("AI JSON request finished model=%s web=%s analysis=%s seconds=%.1f",model_name(),web,schema is globals().get("ANALYSIS_SCHEMA"),time.monotonic()-started)
     return json.loads(r.output_text)
 
 def text_call(prompt,web=False):
@@ -339,6 +345,45 @@ def chunks_from_docs(docs,max_chars=1800):
                 if part:
                     out.append({"doc":d["name"],"page":p["page"],"text":part,"type":d["document_type"]})
     return out
+
+def analysis_fingerprint(docs):
+    """Stable content fingerprint used only to reuse an unchanged analysis."""
+    digest=hashlib.sha256()
+    for document in docs:
+        digest.update(str(document.get("id","")).encode())
+        digest.update(str(document.get("document_type","")).encode())
+        digest.update(str(document.get("name","")).encode("utf-8"))
+        for page in document.get("pages",[]):
+            digest.update(str(page.get("page","")).encode())
+            digest.update(str(page.get("text","")).encode("utf-8"))
+    return digest.hexdigest()
+
+def fast_analysis_material(course_name,docs,chunks,max_chars=42000):
+    """Sample every document and the full range without sending a huge prompt."""
+    if not chunks:return ""
+    selected=[];seen=set()
+    def add(chunk):
+        key=(chunk.get("doc"),chunk.get("page"),chunk.get("text"))
+        if key not in seen:
+            seen.add(key);selected.append(chunk)
+    # Preserve representation for every uploaded document first.
+    for document in docs:
+        own=[x for x in chunks if x.get("doc")==document.get("name")]
+        if not own:continue
+        for index in sorted({0,len(own)//2,len(own)-1}):add(own[index])
+    # Then sample the whole course evenly, avoiding front-page bias.
+    target=min(28,len(chunks))
+    for i in range(target):
+        add(chunks[round(i*(len(chunks)-1)/max(1,target-1))])
+    parts=[];used=0
+    for item in selected:
+        part=f"[{item['doc']} p.{item['page']}]\n{item['text']}"
+        if used+len(part)>max_chars:
+            remaining=max_chars-used
+            if remaining>200:parts.append(part[:remaining])
+            break
+        parts.append(part);used+=len(part)+2
+    return "\n\n".join(parts)
 
 STOP=set("그리고 그러나 또는 대한 하는 있는 없는 으로 에서 에게 이것 저것 해당 관련 통해 경우 위해 따른 보다 매우 또한 내용 자료 강의".split())
 def tokenize(s):return [x for x in re.findall(r"[가-힣A-Za-z0-9]{2,}",s.lower()) if x not in STOP]

@@ -6,8 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_android_release_metadata_and_custom_icon():
     manifest = (ROOT / "android/AndroidManifest.xml").read_text()
-    assert 'android:versionCode="920"' in manifest
-    assert 'android:versionName="9.2.0"' in manifest
+    assert 'android:versionCode="930"' in manifest
+    assert 'android:versionName="9.3.0"' in manifest
     assert 'android.permission.RECORD_AUDIO' in manifest
     assert 'android:icon="@mipmap/ic_launcher"' in manifest
     assert 'android:roundIcon="@mipmap/ic_launcher_round"' in manifest
