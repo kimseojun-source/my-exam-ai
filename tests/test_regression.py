@@ -222,12 +222,16 @@ def test_stable_subject_analysis_uses_one_ai_round_trip(monkeypatch):
  assert len(calls)==1 and calls[0]['web'] is False
 
 def test_automatic_analysis_uses_dedicated_fast_model(monkeypatch):
- observed={}
+ observed={};client_options={}
  class Responses:
   def create(self,**kwargs):
    observed.update(kwargs);return type('Result',(),{'output_text':'{}'})()
+ def fake_client(timeout=None):
+  client_options['timeout']=timeout;return type('Client',(),{'responses':Responses()})()
  monkeypatch.setenv('OPENAI_ANALYSIS_MODEL','gpt-5.4-mini')
- monkeypatch.setattr(server,'client',lambda:type('Client',(),{'responses':Responses()})())
+ monkeypatch.setenv('OPENAI_ANALYSIS_TIMEOUT','10')
+ monkeypatch.setattr(server,'client',fake_client)
  assert server.json_call('analyze',server.ANALYSIS_SCHEMA)=={}
  assert observed['model']=='gpt-5.4-mini'
  assert observed['reasoning']=={'effort':'low'}
+ assert client_options['timeout']==10

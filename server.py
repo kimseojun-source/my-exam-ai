@@ -191,20 +191,22 @@ def days_left(s):
     except:return None
 
 # ---------- OpenAI ----------
-def client():
+def client(timeout=None):
     key=os.getenv("OPENAI_API_KEY","").strip()
     if not key:return None
     from openai import OpenAI
-    return OpenAI(api_key=key, timeout=float(os.getenv("OPENAI_TIMEOUT","35")), max_retries=0)
+    request_timeout=float(timeout if timeout is not None else os.getenv("OPENAI_TIMEOUT","35"))
+    return OpenAI(api_key=key, timeout=request_timeout, max_retries=0)
 
 def model_name(): return os.getenv("OPENAI_MODEL","gpt-5.6")
 def analysis_model_name(): return os.getenv("OPENAI_ANALYSIS_MODEL","gpt-5.4-mini")
 def vision_model(): return os.getenv("OPENAI_VISION_MODEL",model_name())
 
 def json_call(prompt,schema,web=False):
-    c=client()
-    if not c:return None
     is_analysis=schema is globals().get("ANALYSIS_SCHEMA")
+    analysis_timeout=float(os.getenv("OPENAI_ANALYSIS_TIMEOUT","10")) if is_analysis else None
+    c=client(timeout=analysis_timeout) if is_analysis else client()
+    if not c:return None
     selected_model=analysis_model_name() if is_analysis else model_name()
     kw={"model":selected_model,"input":prompt,
         "text":{"format":{"type":"json_schema","name":"result","strict":True,"schema":schema}}}
