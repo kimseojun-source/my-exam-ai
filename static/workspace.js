@@ -7,8 +7,10 @@
  drawer.innerHTML='<div class="drawer-head"><h2>과목 · 자료 관리</h2><button type="button" data-close-drawer aria-label="메뉴 닫기">닫기 ×</button></div>';
  document.body.append(drawer);drawer.append(side,management);
  drawer.querySelector('[data-close-drawer]').onclick=()=>drawer.close();
- const top=document.querySelector('#app .top'),menu=document.createElement('button');menu.type='button';menu.textContent='☰';menu.setAttribute('aria-label','과목과 자료 메뉴');menu.setAttribute('aria-haspopup','dialog');top.prepend(menu);
- function openMenu(){drawer.showModal();}menu.onclick=openMenu;
+ const top=document.querySelector('#app .top'),menu=document.createElement('button');menu.type='button';menu.textContent='☰';menu.setAttribute('aria-label','과목과 자료 메뉴');menu.setAttribute('aria-haspopup','dialog');menu.setAttribute('aria-controls','studyDrawer');menu.setAttribute('aria-expanded','false');top.prepend(menu);
+ function openMenu(){drawer.showModal();menu.setAttribute('aria-expanded','true');}menu.onclick=openMenu;
+ drawer.addEventListener('click',event=>{if(event.target===drawer)drawer.close();});
+ drawer.addEventListener('close',()=>menu.setAttribute('aria-expanded','false'));
  const shell=document.createElement('div');shell.className='study-split';
  shell.innerHTML='<section class="study-source" aria-label="원본 자료"><div class="source-tools"><select id="sourceDocument" aria-label="자료 선택"></select><div class="source-pages"><button data-prev aria-label="이전 페이지">‹</button><input id="sourcePage" type="number" min="1" aria-label="페이지 번호"><span id="sourceCount"></span><button data-next aria-label="다음 페이지">›</button><button data-pen>필기</button></div></div><div id="sourceStage" tabindex="0"></div></section><div class="study-divider"><input type="range" min="30" max="65" value="45" aria-label="자료 영역 너비"></div><section class="study-explanation" aria-label="설명과 학습"></section>';
  const right=shell.querySelector('.study-explanation');
