@@ -198,21 +198,24 @@ def client():
     return OpenAI(api_key=key, timeout=float(os.getenv("OPENAI_TIMEOUT","35")), max_retries=0)
 
 def model_name(): return os.getenv("OPENAI_MODEL","gpt-5.6")
+def analysis_model_name(): return os.getenv("OPENAI_ANALYSIS_MODEL","gpt-5.4-mini")
 def vision_model(): return os.getenv("OPENAI_VISION_MODEL",model_name())
 
 def json_call(prompt,schema,web=False):
     c=client()
     if not c:return None
-    kw={"model":model_name(),"input":prompt,
+    is_analysis=schema is globals().get("ANALYSIS_SCHEMA")
+    selected_model=analysis_model_name() if is_analysis else model_name()
+    kw={"model":selected_model,"input":prompt,
         "text":{"format":{"type":"json_schema","name":"result","strict":True,"schema":schema}}}
     # Automatic course analysis is latency-sensitive. Keep the deeper default
     # reasoning behavior for quizzes, grading and other focused study tools.
-    if schema is globals().get("ANALYSIS_SCHEMA"):
+    if is_analysis:
         kw["reasoning"]={"effort":os.getenv("OPENAI_ANALYSIS_REASONING","low")}
     if web: kw["tools"]=[{"type":"web_search"}]
     started=time.monotonic()
     try:r=c.responses.create(**kw)
-    finally:logging.info("AI JSON request finished model=%s web=%s analysis=%s seconds=%.1f",model_name(),web,schema is globals().get("ANALYSIS_SCHEMA"),time.monotonic()-started)
+    finally:logging.info("AI JSON request finished model=%s web=%s analysis=%s seconds=%.1f",selected_model,web,is_analysis,time.monotonic()-started)
     return json.loads(r.output_text)
 
 def text_call(prompt,web=False):

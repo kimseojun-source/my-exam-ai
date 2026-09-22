@@ -220,3 +220,14 @@ def test_stable_subject_analysis_uses_one_ai_round_trip(monkeypatch):
  monkeypatch.setattr(server,'json_call',fake_json)
  assert c.post(base+'/analyze').status_code==200
  assert len(calls)==1 and calls[0]['web'] is False
+
+def test_automatic_analysis_uses_dedicated_fast_model(monkeypatch):
+ observed={}
+ class Responses:
+  def create(self,**kwargs):
+   observed.update(kwargs);return type('Result',(),{'output_text':'{}'})()
+ monkeypatch.setenv('OPENAI_ANALYSIS_MODEL','gpt-5.4-mini')
+ monkeypatch.setattr(server,'client',lambda:type('Client',(),{'responses':Responses()})())
+ assert server.json_call('analyze',server.ANALYSIS_SCHEMA)=={}
+ assert observed['model']=='gpt-5.4-mini'
+ assert observed['reasoning']=={'effort':'low'}
