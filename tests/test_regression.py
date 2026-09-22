@@ -237,3 +237,12 @@ def test_automatic_analysis_uses_dedicated_fast_model(monkeypatch):
  assert observed['model']=='gpt-5.4-mini'
  assert observed['reasoning']=={'effort':'low'}
  assert client_options['timeout']==10
+
+def test_cancelled_analysis_does_not_replace_saved_result():
+ c=TestClient(server.app);cid=setup_course(c,'Cancelled Analysis');base=f'/api/p/1/courses/{cid}'
+ c.post(base+'/documents',files={'files':('cancel.pdf',pdf_bytes(),'application/pdf')})
+ run_id='cancel-run-1234'
+ assert c.post(base+f'/analyze/{run_id}/cancel').status_code==200
+ result=c.post(base+f'/analyze?run_id={run_id}')
+ assert result.status_code==409
+ assert c.get(base).json()['analysis']=={}

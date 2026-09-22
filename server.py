@@ -1,5 +1,5 @@
 
-import os, json, re, sqlite3, tempfile, math, hashlib, base64, secrets, io, logging, mimetypes, time
+import os, json, re, sqlite3, tempfile, math, hashlib, base64, secrets, io, logging, mimetypes, time, threading
 from starlette.concurrency import run_in_threadpool
 from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
@@ -43,6 +43,8 @@ SESSION_SECRET=get_session_secret()
 IS_HTTPS=os.getenv("COOKIE_HTTPS_ONLY", "1" if os.getenv("RAILWAY_PROJECT_ID") else "0")=="1"
 APP_VERSION="9.3.0"
 app=FastAPI(title="FOR'EST",version=APP_VERSION)
+ANALYSIS_CANCELLED={}
+ANALYSIS_CANCEL_LOCK=threading.Lock()
 
 def nowiso(): return datetime.now().isoformat(timespec="seconds")
 
@@ -799,8 +801,23 @@ def reprocess_document(pid:int,cid:int,did:int):
     con=db();con.execute("UPDATE documents SET pages=?,text_json=?,extraction_mode=?,image_count=? WHERE id=? AND course_id=?",(total,json.dumps(pages,ensure_ascii=False),mode,images,did,cid));con.commit();con.close()
     return {"ok":True,"extraction":mode,"warning":warning}
 
+def clean_analysis_run_id(run_id):
+    value=str(run_id or "").strip()
+    if value and not re.fullmatch(r"[A-Za-z0-9_-]{8,80}",value):raise HTTPException(400,"분석 실행 정보가 올바르지 않아.")
+    return value
+
+@app.post("/api/p/{pid}/courses/{cid}/analyze/{run_id}/cancel")
+def cancel_analysis(pid:int,cid:int,run_id:str):
+    course_row(pid,cid);run_id=clean_analysis_run_id(run_id);now=time.monotonic()
+    with ANALYSIS_CANCEL_LOCK:
+        for key,stamp in list(ANALYSIS_CANCELLED.items()):
+            if now-stamp>300:ANALYSIS_CANCELLED.pop(key,None)
+        ANALYSIS_CANCELLED[run_id]=now
+    return {"ok":True,"cancelled":True}
+
 @app.post("/api/p/{pid}/courses/{cid}/analyze")
-def analyze(pid:int,cid:int):
+def analyze(pid:int,cid:int,run_id:str=""):
+    run_id=clean_analysis_run_id(run_id)
     c=course_row(pid,cid)
     docs=course_docs(pid,cid,["lecture","textbook","notes"])
     if not docs:docs=course_docs(pid,cid)
@@ -826,6 +843,9 @@ def analyze(pid:int,cid:int):
     except Exception as e:
         logging.warning("Fast analysis AI unavailable; using source fallback: %r",e);a=None
     if a is None:a=fallback_analysis(c["name"],chunks)
+    if run_id:
+        with ANALYSIS_CANCEL_LOCK:cancelled=ANALYSIS_CANCELLED.pop(run_id,None) is not None
+        if cancelled:raise HTTPException(409,"자동분석을 취소했어. 기존 결과는 그대로 유지돼.")
     a["_source_fingerprint"]=fingerprint;a["_cache_hit"]=False;a["_analysis_mode"]="fast_cached"
     con=db();con.execute("UPDATE courses SET profile_json=?,analysis_json=? WHERE id=? AND profile_id=?",
       (json.dumps(a.get("course_profile",{}),ensure_ascii=False),json.dumps(a,ensure_ascii=False),cid,pid))
