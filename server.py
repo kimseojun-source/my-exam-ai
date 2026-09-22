@@ -1046,11 +1046,14 @@ def core_detail(pid:int,cid:int,payload:dict):
         answer=topic+"\n\nAI API를 사용할 수 없어 현재 자료의 관련 근거만 보여줄게.\n"+"\n".join(
             f"- {x['doc']} p.{x['page']}: {x['text'][:260]}" for x in related[:5]
         )
+    doc_ids={}
+    for document in docs:doc_ids.setdefault(document["name"],[]).append(document["id"])
     seen=set();sources=[]
     for x in related:
         key=(x["doc"],x["page"])
         if key in seen:continue
-        seen.add(key);sources.append({"doc":x["doc"],"page":x["page"]})
+        matches=doc_ids.get(x["doc"],[])
+        seen.add(key);sources.append({"doc":x["doc"],"page":x["page"],"document_id":matches[0] if len(matches)==1 else None})
         if len(sources)>=6:break
     return {"title":topic,"category":CORE_DETAIL_LABELS[category],"answer":answer,"sources":sources}
 

@@ -124,8 +124,10 @@ def test_course_list_exposes_resume_summary_without_cross_profile_data():
 
 def test_exam_core_creates_focused_three_question_practice():
  c=TestClient(server.app);cid=setup_course(c,'Core Practice');base=f'/api/p/1/courses/{cid}'
- c.post(base+'/documents',files={'files':('core.pdf',pdf_bytes(),'application/pdf')})
+ did=c.post(base+'/documents',files={'files':('core.pdf',pdf_bytes(),'application/pdf')}).json()['added'][0]['id']
  analysis=c.post(base+'/analyze').json();category=next(k for k in server.CORE_DETAIL_LABELS if analysis.get(k))
+ detail=c.post(base+'/core-detail',json={'category':category,'index':0})
+ assert detail.status_code==200 and detail.json()['sources'][0]['document_id']==did
  result=c.post(base+'/core-practice',json={'category':category,'index':0})
  assert result.status_code==200,result.text
  data=result.json();assert len(data['questions'])==3 and data['focus']['category']==server.CORE_DETAIL_LABELS[category]
