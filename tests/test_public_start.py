@@ -24,3 +24,18 @@ def test_homepage_has_mobile_viewport_and_no_payment_or_user_data_scripts():
     assert '<script' not in page
     assert '/api/profiles' not in page
     assert 'checkout' not in page.lower()
+
+
+def test_search_files_expose_only_the_public_homepage():
+    root = Path(__file__).resolve().parents[1] / 'static'
+    robots = (root / 'robots.txt').read_text()
+    sitemap = (root / 'sitemap.xml').read_text()
+    indexnow_files = list(root.glob('[0-9a-f]' * 32 + '.txt'))
+
+    assert 'Disallow: /' in robots
+    assert 'Allow: /start.html' in robots
+    assert 'Allow: /sitemap.xml' in robots
+    assert len(indexnow_files) == 1
+    assert f'Allow: /{indexnow_files[0].name}' in robots
+    assert '/start.html' in sitemap
+    assert '/api/' not in sitemap
