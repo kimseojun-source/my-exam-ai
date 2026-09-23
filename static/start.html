@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#d6ff00">
-  <meta name="description" content="FOR'EST: 과목별 자료를 읽고, 이해하고, 기억하는 학습 공간.">
+  <meta name="description" content="FOR'EST 포레스트는 과목별 PDF와 필기를 함께 보고 핵심 설명과 문제로 복습하는 학습 웹앱입니다. 현재 기존 사용자만 로그인할 수 있습니다.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://forest-v12-runtime-production.up.railway.app/start.html">
   <meta property="og:type" content="website">
   <meta property="og:title" content="FOR'EST | 내 자료에서 시작하는 공부">
-  <meta property="og:description" content="과목별 PDF와 필기를 보면서 이해하고 기억하는 학습 공간.">
+  <meta property="og:description" content="과목별 PDF와 필기를 함께 보고 핵심 설명과 문제로 복습하는 학습 공간. 현재 기존 사용자만 로그인할 수 있습니다.">
   <meta property="og:url" content="https://forest-v12-runtime-production.up.railway.app/start.html">
   <link rel="icon" href="/icons/icon-192.png">
   <title>FOR'EST | 내 자료에서 시작하는 공부</title>
@@ -29,8 +29,9 @@
     .preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pane{min-height:260px;background:#fff;border-radius:18px;padding:17px;color:var(--ink)}.pane h2{font-size:15px;margin:0 0 12px}.paper-line{height:8px;border-radius:10px;background:#dbe2df;margin:12px 0}.paper-line.short{width:57%}.paper-line.mid{width:82%}.pane.summary{background:#eaffac}.pane.summary p{font-size:13px;line-height:1.65}
     section.features{background:#fff;border-block:1px solid var(--line);padding:82px 0}.section-title{font-size:clamp(29px,4vw,44px);line-height:1.2;letter-spacing:-.055em;margin:12px 0 26px}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{padding:26px;border-radius:20px;border:1px solid var(--line);background:#fafbf5}.card b{font-size:20px}.card p{color:var(--muted);margin-bottom:0}
     .launch{padding:80px 0}.launch-box{background:var(--lime);border-radius:27px;padding:clamp(26px,5vw,55px);display:flex;align-items:center;justify-content:space-between;gap:30px}.launch h2{font-size:clamp(27px,4vw,42px);line-height:1.2;letter-spacing:-.055em;margin:0 0 10px}.launch p{margin:0;max-width:620px}
+    .faq{padding:0 0 80px}.faq h2{font-size:clamp(26px,4vw,38px);letter-spacing:-.05em}.faq dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.faq dl>div{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px}.faq dt{font-weight:850}.faq dd{margin:8px 0 0;color:var(--muted)}
     footer{padding:34px 0;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
-    @media(max-width:800px){.hero{grid-template-columns:1fr;padding-block:65px}.cards{grid-template-columns:1fr}.launch-box{display:block}.launch-box .button{margin-top:24px}}
+    @media(max-width:800px){.hero{grid-template-columns:1fr;padding-block:65px}.cards,.faq dl{grid-template-columns:1fr}.launch-box{display:block}.launch-box .button{margin-top:24px}}
     @media(max-width:420px){.wrap{width:min(100% - 28px,1160px)}.brand{font-size:19px}.nav a:last-child{font-size:13px;padding-inline:12px}.preview-grid{grid-template-columns:1fr}.pane{min-height:170px}.hero h1{font-size:42px}}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
   </style>
@@ -39,11 +40,12 @@
   <a class="skip" href="#main">본문으로 바로가기</a>
   <header><nav class="wrap nav" aria-label="주요 메뉴"><a class="brand" href="/start.html"><img src="/icons/icon-192.png" alt="" width="40" height="40">FOR'EST</a><a href="/">기존 사용자 로그인</a></nav></header>
   <main id="main">
-    <div class="wrap hero"><div><span class="eyebrow">For your Ever-Smarter Tomorrow</span><h1>내 자료에서<br>공부가 시작돼.</h1><p>과목별 PDF와 필기를 보면서 핵심을 이해하고, 문제를 풀고, 다시 기억하는 나만의 학습 공간.</p><div class="actions"><a class="button" href="#features">어떻게 공부하는지 보기</a><a class="button secondary" href="/">기존 사용자 로그인</a></div><p class="notice">새 회원가입과 유료 서비스는 준비 중이야. 지금은 기존 사용자만 로그인할 수 있어.</p></div>
+    <div class="wrap hero"><div><span class="eyebrow">For your Ever-Smarter Tomorrow</span><h1>내 자료에서<br>공부가 시작돼.</h1><p>FOR'EST(포레스트)는 과목별 PDF와 필기를 보면서 핵심을 이해하고, 문제를 풀고, 다시 기억하는 학습 웹앱이야.</p><div class="actions"><a class="button" href="#features">어떻게 공부하는지 보기</a><a class="button secondary" href="/">기존 사용자 로그인</a></div><p class="notice">새 회원가입과 유료 서비스는 준비 중이야. 지금은 기존 사용자만 로그인할 수 있어.</p></div>
       <div class="preview" role="img" aria-label="왼쪽 자료와 오른쪽 핵심 설명을 함께 보는 학습 화면 예시"><div class="preview-top"><span class="dot"></span> FOR'EST 학습 화면 미리보기</div><div class="preview-grid"><div class="pane"><h2>내 강의 자료</h2><div class="paper-line"></div><div class="paper-line mid"></div><div class="paper-line"></div><div class="paper-line short"></div><div class="paper-line mid"></div></div><div class="pane summary"><h2>핵심 설명</h2><p>자료를 읽다가 궁금해진 부분을 확인하고, 바로 이해한 내용을 떠올려 봐.</p><div class="paper-line mid"></div><div class="paper-line short"></div></div></div></div>
     </div>
     <section id="features" class="features"><div class="wrap"><span class="eyebrow">Study flow</span><h2 class="section-title">자료를 넣고, 이해하고, 기억해.</h2><div class="cards"><article class="card"><b>01 · 과목별 자료</b><p>PDF와 필기를 과목마다 정리하고 자료 옆에서 설명을 확인해.</p></article><article class="card"><b>02 · 능동 회상</b><p>읽고 끝내지 말고 질문과 문제로 기억하는지 확인해.</p></article><article class="card"><b>03 · 시험 전 복습</b><p>복습할 내용을 다시 꺼내 보며 시험을 준비해.</p></article></div></div></section>
     <section class="wrap launch" aria-labelledby="launch-title"><div class="launch-box"><div><h2 id="launch-title">누구나 쓰는 FOR'EST를 준비 중이야.</h2><p>개인 계정, 자료 분리, 결제와 요금 안내를 검증한 뒤 신규 가입을 열 예정이야. 아직 결제할 수 없고 요금도 확정되지 않았어.</p></div><a class="button" href="/">기존 사용자 로그인</a></div></section>
+    <section class="wrap faq" aria-labelledby="faq-title"><h2 id="faq-title">자주 묻는 질문</h2><dl><div><dt>FOR'EST는 무엇을 하는 서비스야?</dt><dd>과목별 PDF 자료를 보며 설명을 확인하고, 문제와 복습으로 공부를 이어 가는 학습 웹앱이야.</dd></div><div><dt>지금 누구나 가입할 수 있어?</dt><dd>아직은 기존 사용자만 로그인할 수 있어. 신규 가입과 결제는 준비 중이야.</dd></div><div><dt>휴대폰과 태블릿에서도 사용할 수 있어?</dt><dd>웹브라우저에서 접속할 수 있고, 화면 크기에 맞춰 자료와 학습 화면이 배치돼.</dd></div><div><dt>이용 요금은 얼마야?</dt><dd>요금은 아직 확정되지 않았고 현재 신규 결제도 받지 않아.</dd></div></dl></section>
   </main>
   <footer><div class="wrap">FOR'EST · 학습 서비스 소개 페이지</div></footer>
 </body>
