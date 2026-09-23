@@ -109,6 +109,21 @@ def test_text_pdf_upload_is_fast_and_explicit_reread_can_enrich_images(monkeypat
  pages,_,_,mode,_=server.extract_document(path,path.name,force_visual=True)
  assert mode=='text+vision' and 'Diagram labels' in pages[0]['text'] and calls==[True]
 
+def test_core_detail_timeout_returns_scoped_sources(monkeypatch):
+ c=TestClient(server.app);cid=setup_course(c,'Slow explanation');base=f'/api/p/1/courses/{cid}'
+ uploaded=c.post(base+'/documents',files={'files':('lecture.pdf',pdf_bytes(),'application/pdf')})
+ did=uploaded.json()['added'][0]['id']
+ analysis=c.post(base+'/analyze').json()
+ category=next(key for key in server.CORE_DETAIL_LABELS if analysis.get(key))
+ def timeout_call(*args,**kwargs):
+  assert kwargs['timeout']==12
+  raise TimeoutError('AI unavailable')
+ monkeypatch.setattr(server,'text_call',timeout_call)
+ result=c.post(base+'/core-detail',json={'category':category,'index':0})
+ assert result.status_code==200,result.text
+ assert result.json()['sources'][0]['document_id']==did
+ assert 'lecture.pdf' in result.json()['answer']
+
 def test_backup_and_snapshot_preserve_existing_records():
  c=TestClient(server.app);cid=setup_course(c);base=f'/api/p/1/courses/{cid}'
  c.post(base+'/documents',files={'files':('lecture.pdf',pdf_bytes(),'application/pdf')})

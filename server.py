@@ -222,8 +222,8 @@ def json_call(prompt,schema,web=False):
     finally:logging.info("AI JSON request finished model=%s web=%s analysis=%s seconds=%.1f",selected_model,web,is_analysis,time.monotonic()-started)
     return json.loads(r.output_text)
 
-def text_call(prompt,web=False):
-    c=client()
+def text_call(prompt,web=False,timeout=None):
+    c=client(timeout=timeout)
     if not c:return None
     kw={"model":model_name(),"input":prompt}
     if web:kw["tools"]=[{"type":"web_search"}]
@@ -1067,7 +1067,11 @@ def core_detail(pid:int,cid:int,payload:dict):
 
 관련 현재 과목 자료:
 {context[:70000]}"""
-    answer=text_call(prompt,web=False)
+    try:
+        answer=text_call(prompt,web=False,timeout=12)
+    except Exception as e:
+        logging.warning("Core detail AI unavailable; showing source excerpts: %r",e)
+        answer=None
     if answer is None:
         answer=topic+"\n\nAI API를 사용할 수 없어 현재 자료의 관련 근거만 보여줄게.\n"+"\n".join(
             f"- {x['doc']} p.{x['page']}: {x['text'][:260]}" for x in related[:5]
