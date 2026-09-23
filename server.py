@@ -222,10 +222,11 @@ def json_call(prompt,schema,web=False):
     finally:logging.info("AI JSON request finished model=%s web=%s analysis=%s seconds=%.1f",selected_model,web,is_analysis,time.monotonic()-started)
     return json.loads(r.output_text)
 
-def text_call(prompt,web=False,timeout=None):
+def text_call(prompt,web=False,timeout=None,fast=False):
     c=client(timeout=timeout)
     if not c:return None
-    kw={"model":model_name(),"input":prompt}
+    kw={"model":analysis_model_name() if fast else model_name(),"input":prompt}
+    if fast:kw["reasoning"]={"effort":"low"}
     if web:kw["tools"]=[{"type":"web_search"}]
     return c.responses.create(**kw).output_text
 
@@ -1047,8 +1048,8 @@ def core_detail(pid:int,cid:int,payload:dict):
 
     docs=course_docs(pid,cid,["lecture","textbook","notes"])
     if not docs:docs=course_docs(pid,cid)
-    related=retrieve(chunks_from_docs(docs),topic,k=12)
-    context="\n\n".join(f"[{x['doc']} p.{x['page']}]\n{x['text']}" for x in related)
+    related=retrieve(chunks_from_docs(docs),topic,k=6)
+    context="\n\n".join(f"[{x['doc']} p.{x['page']}]\n{x['text'][:1100]}" for x in related)
     prompt=f"""너는 대학 시험 대비 설명 튜터다.
 현재 과목: {c['name']}
 시험핵심 분류: {CORE_DETAIL_LABELS[category]}
@@ -1066,9 +1067,9 @@ def core_detail(pid:int,cid:int,payload:dict):
 5. 근거: 사용한 문서명과 페이지
 
 관련 현재 과목 자료:
-{context[:70000]}"""
+{context[:6500]}"""
     try:
-        answer=text_call(prompt,web=False,timeout=12)
+        answer=text_call(prompt,web=False,timeout=12,fast=True)
     except Exception as e:
         logging.warning("Core detail AI unavailable; showing source excerpts: %r",e)
         answer=None

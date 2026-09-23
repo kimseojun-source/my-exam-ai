@@ -117,12 +117,26 @@ def test_core_detail_timeout_returns_scoped_sources(monkeypatch):
  category=next(key for key in server.CORE_DETAIL_LABELS if analysis.get(key))
  def timeout_call(*args,**kwargs):
   assert kwargs['timeout']==12
+  assert kwargs['fast'] is True
+  assert len(args[0])<7500
   raise TimeoutError('AI unavailable')
  monkeypatch.setattr(server,'text_call',timeout_call)
  result=c.post(base+'/core-detail',json={'category':category,'index':0})
  assert result.status_code==200,result.text
  assert result.json()['sources'][0]['document_id']==did
  assert 'lecture.pdf' in result.json()['answer']
+
+def test_fast_text_request_uses_small_model_and_low_reasoning(monkeypatch):
+ observed=[]
+ class Responses:
+  def create(self,**kwargs):
+   observed.append(kwargs)
+   return type('Result',(),{'output_text':'설명'})()
+ monkeypatch.setattr(server,'client',lambda timeout=None:type('API',(),{'responses':Responses()})())
+ monkeypatch.setattr(server,'analysis_model_name',lambda:'fast-model')
+ assert server.text_call('짧은 설명',timeout=12,fast=True)=='설명'
+ assert observed[0]['model']=='fast-model'
+ assert observed[0]['reasoning']=={'effort':'low'}
 
 def test_backup_and_snapshot_preserve_existing_records():
  c=TestClient(server.app);cid=setup_course(c);base=f'/api/p/1/courses/{cid}'
