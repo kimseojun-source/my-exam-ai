@@ -18,7 +18,9 @@
  const mobile=document.createElement('div');mobile.className='study-mobile-tabs';mobile.innerHTML='<button data-view="source">자료</button><button data-view="explanation">설명 · 학습</button>';header.after(mobile);
  mobile.onclick=e=>{const b=e.target.closest('[data-view]');if(b){shell.dataset.view=b.dataset.view;mobile.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));}};
  shell.dataset.view='explanation';mobile.querySelector('[data-view="explanation"]').setAttribute('aria-pressed','true');
- shell.querySelector('input[type=range]').oninput=e=>shell.style.setProperty('--source-width',e.target.value+'%');
+ const divider=shell.querySelector('input[type=range]'),widthKey='forest_source_width';
+ try{const savedWidth=Math.max(30,Math.min(65,Number(localStorage.getItem(widthKey))||45));divider.value=savedWidth;shell.style.setProperty('--source-width',savedWidth+'%');}catch{}
+ divider.oninput=e=>{const width=e.target.value;shell.style.setProperty('--source-width',width+'%');try{localStorage.setItem(widthKey,width);}catch{}};
  let doc=null,page=1,url=null,request=null,epoch=0;
  const select=document.querySelector('#sourceDocument'),input=document.querySelector('#sourcePage'),stage=document.querySelector('#sourceStage');
  const key=()=>`forest_reading_${PID}_${CID}`;

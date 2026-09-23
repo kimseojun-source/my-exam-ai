@@ -47,7 +47,7 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v23" in script
+    assert "forest-shell-v24" in script
     for asset in ["/app.css?v=17", "/app.js?v=19", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
@@ -59,11 +59,12 @@ def test_study_first_workspace_is_cached_and_keeps_management_in_drawer():
     html = (ROOT / "static/index.html").read_text()
     shell = (ROOT / "static/workspace.js").read_text()
     styles = (ROOT / "static/workspace.css").read_text()
-    assert '/workspace.js?v=2' in html
-    assert '/workspace.css?v=2' in html
+    assert '/workspace.js?v=3' in html
+    assert '/workspace.css?v=3' in html
     assert "studyDrawer" in shell
     assert "event.target===drawer" in shell
     assert "aria-expanded" in shell
+    assert "forest_source_width" in shell
     assert "sourceDocument" in shell
     assert "forest_reading_" in shell
     assert "openAnnotator(doc.id,doc.pages,doc.name,page)" in shell
