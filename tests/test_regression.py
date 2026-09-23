@@ -177,6 +177,25 @@ def test_lecture_api_audio_transcript_realtime_and_profile_isolation(monkeypatch
  guest=next(p['id'] for p in c.get('/api/profiles').json() if not p['is_owner']);c.post(f'/api/profiles/{guest}/verify',data={'pin':'1234'})
  assert c.get(base+'/lectures').status_code==403
 
+def test_realtime_secret_uses_supported_transcription_settings(monkeypatch):
+ captured={}
+ class Response:
+  def __enter__(self):return self
+  def __exit__(self,*args):pass
+  def read(self):return b'{"value":"test-ephemeral","expires_at":123}'
+ def fake_urlopen(request,timeout):
+  captured['url']=request.full_url
+  captured['body']=json.loads(request.data)
+  assert timeout==20
+  return Response()
+ monkeypatch.setattr(forest_app.urllib.request,'urlopen',fake_urlopen)
+ result=forest_app._openai_realtime_secret('test-key','test-identifier')
+ config=captured['body']['session']['audio']['input']
+ assert captured['url'].endswith('/realtime/client_secrets')
+ assert config['transcription']['model']=='gpt-live-transcribe'
+ assert config['turn_detection'] is None
+ assert result['value']=='test-ephemeral'
+
 def test_recording_cancel_removes_draft_and_transcript_but_not_saved_recording():
  c=TestClient(server.app);cid=setup_course(c,'Cancel lecture');base=f'/api/p/1/courses/{cid}'
  created=c.post(base+'/lectures',json={'title':'Wrong recording'});sid=created.json()['id']

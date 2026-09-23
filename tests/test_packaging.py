@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v24" in script
-    for asset in ["/app.css?v=17", "/app.js?v=19", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v25" in script
+    for asset in ["/app.css?v=17", "/app.js?v=20", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script

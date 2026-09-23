@@ -284,7 +284,7 @@ def transcribe_lecture(pid:int,cid:int,sid:int,background_tasks:BackgroundTasks)
     return {'status':'processing'}
 
 def _openai_realtime_secret(api_key,safety_identifier):
-    body=json.dumps({'expires_after':{'anchor':'created_at','seconds':120},'session':{'type':'transcription','audio':{'input':{'noise_reduction':{'type':'far_field'},'transcription':{'model':os.getenv('OPENAI_TRANSCRIBE_MODEL','gpt-live-transcribe'),'language':'ko'},'turn_detection':{'type':'server_vad'}}}}}).encode()
+    body=json.dumps({'expires_after':{'anchor':'created_at','seconds':120},'session':{'type':'transcription','audio':{'input':{'noise_reduction':{'type':'far_field'},'transcription':{'model':os.getenv('OPENAI_TRANSCRIBE_MODEL','gpt-live-transcribe'),'language':'ko','delay':'low'},'turn_detection':None}}}}).encode()
     req=urllib.request.Request('https://api.openai.com/v1/realtime/client_secrets',data=body,headers={'Authorization':f'Bearer {api_key}','Content-Type':'application/json','OpenAI-Safety-Identifier':safety_identifier},method='POST')
     try:
         with urllib.request.urlopen(req,timeout=20) as response:return json.loads(response.read())
