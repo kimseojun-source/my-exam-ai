@@ -98,6 +98,17 @@ def test_image_reprocess_and_empty_analysis(monkeypatch):
  assert c.post(base+f'/documents/{did}/reprocess').status_code==200
  assert server.chunks_from_docs(server.course_docs(1,cid))[0]['text']=='A short note.'
 
+def test_text_pdf_upload_is_fast_and_explicit_reread_can_enrich_images(monkeypatch,tmp_path):
+ path=tmp_path/'illustrated.pdf';path.write_bytes(pdf_bytes())
+ monkeypatch.setattr(server,'inspect_pdf',lambda _path:(1,2))
+ monkeypatch.setattr(server,'client',lambda:object())
+ calls=[]
+ monkeypatch.setattr(server,'visual_pdf_notes',lambda *_args:calls.append(True) or [{'page':1,'text':'Diagram labels'}])
+ pages,_,_,mode,warning=server.extract_document(path,path.name)
+ assert mode=='text' and len(pages)==1 and '다시 읽기' in warning and not calls
+ pages,_,_,mode,_=server.extract_document(path,path.name,force_visual=True)
+ assert mode=='text+vision' and 'Diagram labels' in pages[0]['text'] and calls==[True]
+
 def test_backup_and_snapshot_preserve_existing_records():
  c=TestClient(server.app);cid=setup_course(c);base=f'/api/p/1/courses/{cid}'
  c.post(base+'/documents',files={'files':('lecture.pdf',pdf_bytes(),'application/pdf')})

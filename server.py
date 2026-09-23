@@ -617,7 +617,7 @@ def visual_image_notes(path):
     pages=json.loads(response.output_text).get("pages",[])
     return [{"page":1,"text":str(x["text"])} for x in pages if str(x.get("text","")).strip()]
 
-def extract_document(path,filename):
+def extract_document(path,filename,force_visual=False):
     suffix=Path(filename).suffix.lower()
     warning=""
     if suffix==".pdf":
@@ -627,11 +627,17 @@ def extract_document(path,filename):
         except Exception:
             raise ValueError("PDF가 손상됐거나 암호로 잠겨 있어. 잠금을 해제한 PDF를 올려줘.")
         mode="text" if pages else "pending_vision"
-        if os.getenv("AUTO_VISUAL_PDF","1")!="0" and client() and needs_visual_pdf(total,coverage,image_count):
+        # Read selectable text immediately on upload. A full-PDF vision request can
+        # time out even though every page already has usable text; users can ask
+        # for visual enrichment with "다시 읽기" when diagrams matter.
+        visual_needed=coverage<0.45 or (force_visual and needs_visual_pdf(total,coverage,image_count))
+        if os.getenv("AUTO_VISUAL_PDF","1")!="0" and client() and visual_needed:
             visual=visual_pdf_notes(path,filename)
             if visual:
                 pages=merge_visual(pages,visual);mode="text+vision" if coverage>=0.2 else "vision/OCR"
             else:warning="시각 분석을 완료하지 못했어. 원본은 보관했으니 다시 읽기를 눌러줘."
+        elif coverage>=0.45 and needs_visual_pdf(total,coverage,image_count) and not force_visual:
+            warning="글자를 먼저 읽었어. 그림·도표가 중요하면 다시 읽기로 보강할 수 있어."
     else:
         image_data_url(path)
         total=1;image_count=1;pages=[];mode="pending_vision"
@@ -796,7 +802,7 @@ async def save_document_annotations(pid:int,cid:int,did:int,request:Request,page
 def reprocess_document(pid:int,cid:int,did:int):
     row,path=owned_document(pid,cid,did)
     if not client():raise HTTPException(503,"AI 연결이 필요해. 원본 자료는 보관되어 있어.")
-    pages,total,images,mode,warning=extract_document(path,row["name"])
+    pages,total,images,mode,warning=extract_document(path,row["name"],force_visual=True)
     if not pages:raise HTTPException(502,warning or "자료 읽기에 실패했어. 원본은 보관되어 있어.")
     con=db();con.execute("UPDATE documents SET pages=?,text_json=?,extraction_mode=?,image_count=? WHERE id=? AND course_id=?",(total,json.dumps(pages,ensure_ascii=False),mode,images,did,cid));con.commit();con.close()
     return {"ok":True,"extraction":mode,"warning":warning}
