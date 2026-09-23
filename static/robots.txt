@@ -1,5 +1,6 @@
 User-agent: *
 Disallow: /
 Allow: /start.html
+Allow: /$
 
 Sitemap: https://forest-v12-runtime-production.up.railway.app/sitemap.xml
