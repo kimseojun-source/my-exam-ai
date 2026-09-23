@@ -22,6 +22,9 @@ def test_homepage_has_mobile_viewport_and_no_payment_or_user_data_scripts():
     assert '본문으로 바로가기' in page
     assert 'prefers-reduced-motion' in page
     assert '<script' not in page
+    assert 'schema.org/SoftwareApplication' in page
+    assert 'itemprop="applicationCategory"' in page
+    assert 'property="og:image"' in page
     assert '/api/profiles' not in page
     assert 'checkout' not in page.lower()
 
