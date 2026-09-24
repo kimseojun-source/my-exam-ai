@@ -88,6 +88,7 @@ uploadDocs=async function(){
   if(files.some(f=>f.size>40*1024*1024))return alert('파일당 40MB까지 올릴 수 있어.');
   const fd=new FormData();files.forEach(f=>fd.append('files',f));fd.append('document_type',$('#dtype').value);
   const button=document.querySelector('[onclick="uploadDocs()"]');
+  let uploadStopped=false;
   await busy(button,async()=>{
     const started=Date.now(),status=$('#uploadStatus');
     documentUploadController=new AbortController();
@@ -106,8 +107,12 @@ uploadDocs=async function(){
     }catch(e){
       if(e.name==='AbortError'){
         if(PID===pid&&CID===cid){
-          await openCourse(cid);
-          $('#uploadStatus').textContent='업로드 요청을 중단했어. 서버 처리가 먼저 끝난 자료가 있으면 목록에 표시돼.';
+          uploadStopped=true;
+          try{
+            const course=await jf(`/api/p/${pid}/courses/${cid}`);
+            if(PID===pid&&CID===cid){COURSE=course;A=course.analysis||{};render();await loadCourses();}
+          }catch(_){/* Keep the selected local files available even if refresh is offline. */}
+          $('#uploadStatus').textContent='업로드 요청을 중단했어. 같은 파일로 다시 시도할 수 있어. 서버 처리가 먼저 끝난 자료가 있으면 목록에 표시돼.';
         }
         return;
       }
@@ -118,7 +123,7 @@ uploadDocs=async function(){
       if(cancelUploadButton){cancelUploadButton.disabled=true;cancelUploadButton.setAttribute('aria-disabled','true');}
     }
   });
-  showSelectedDocuments();
+  if(!uploadStopped)showSelectedDocuments();
 };
 for(const name of ['makeQuiz','analyzePattern','gradeQuiz','askTutor']){const original=window[name];window[name]=async function(){const b=document.querySelector(`[onclick="${name}()"]`);return busy(b,()=>original());};}
 {

@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v34" in script
-    for asset in ["/app.css?v=20", "/app.js?v=27", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v35" in script
+    for asset in ["/app.css?v=20", "/app.js?v=28", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -179,6 +179,8 @@ def test_document_upload_can_be_stopped_without_hiding_partial_results():
     assert "documentUploadController?.abort()" in app
     assert "e.name==='AbortError'" in app
     assert "서버 처리가 먼저 끝난 자료가 있으면 목록에 표시돼" in app
+    assert "if(!uploadStopped)showSelectedDocuments()" in app
+    assert "같은 파일로 다시 시도할 수 있어" in app
 
 
 def test_mobile_touch_targets_remain_at_least_44px():
