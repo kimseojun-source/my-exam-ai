@@ -170,6 +170,17 @@ def test_document_selection_gives_immediate_mobile_feedback():
     assert "if(button)button.disabled=true" in app
 
 
+def test_document_upload_can_be_stopped_without_hiding_partial_results():
+    html = (ROOT / "static/index.html").read_text()
+    app = (ROOT / "static/app.js").read_text()
+    assert 'id="cancelUploadButton"' in html
+    assert "documentUploadController=new AbortController()" in app
+    assert "signal:documentUploadController.signal" in app
+    assert "documentUploadController?.abort()" in app
+    assert "e.name==='AbortError'" in app
+    assert "서버 처리가 먼저 끝난 자료가 있으면 목록에 표시돼" in app
+
+
 def test_mobile_touch_targets_remain_at_least_44px():
     styles = (ROOT / "static/app.css").read_text()
     assert ".document-delete{flex:none;min-height:44px" in styles

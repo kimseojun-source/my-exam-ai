@@ -92,7 +92,10 @@ label{font-size:12px;font-weight:850;display:block;margin:10px 0 5px}.row{displa
           <label>자료 종류</label>
           <select id="dtype"><option value="lecture">강의자료</option><option value="textbook">교재/참고자료</option><option value="notes">필기/정리</option><option value="past_exam">기출문제/족보</option></select>
           <label for="files">PDF·이미지 추가</label><input id="files" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,application/pdf,image/*" multiple><p class="mini">한 번에 15개 · 파일당 40MB · 촬영한 필기와 스캔 PDF도 보관할 수 있어.</p><div id="uploadStatus" role="status" aria-live="polite"></div><div id="documentList"></div>
-          <button class="soft" style="width:100%;margin-top:8px" onclick="uploadDocs()" disabled>자료 추가</button>
+          <div class="row upload-actions" style="margin-top:8px">
+            <button class="soft" onclick="uploadDocs()" disabled>자료 추가</button>
+            <button id="cancelUploadButton" class="ghost" type="button" disabled aria-disabled="true">업로드 중단</button>
+          </div>
           <div class="notice" style="margin-top:10px">현재 과목 AI에는 <b>현재 사용자 + 현재 과목</b>의 자료만 전달돼. 기출도 별도 유형으로 저장돼.</div>
           <section class="lecture-recorder" aria-labelledby="lectureRecorderTitle">
             <div class="recorder-head">

@@ -78,6 +78,9 @@ function showSelectedDocuments(){
   else status.textContent=`자료 ${files.length}개 · 총 ${totalMb.toFixed(1)}MB 선택됨. 아래 자료 추가를 누르면 읽기를 시작해.`;
 }
 $('#files')?.addEventListener('change',showSelectedDocuments);
+let documentUploadController=null;
+const cancelUploadButton=$('#cancelUploadButton');
+cancelUploadButton?.addEventListener('click',()=>documentUploadController?.abort());
 uploadDocs=async function(){
   const files=[...$('#files').files],pid=PID,cid=CID;
   if(!files.length)return alert('PDF 또는 이미지를 골라줘.');
@@ -87,6 +90,8 @@ uploadDocs=async function(){
   const button=document.querySelector('[onclick="uploadDocs()"]');
   await busy(button,async()=>{
     const started=Date.now(),status=$('#uploadStatus');
+    documentUploadController=new AbortController();
+    if(cancelUploadButton){cancelUploadButton.disabled=false;cancelUploadButton.setAttribute('aria-disabled','false');}
     const showProgress=()=>{
       if(PID!==pid||CID!==cid)return;
       const seconds=Math.max(0,Math.floor((Date.now()-started)/1000));
@@ -94,14 +99,24 @@ uploadDocs=async function(){
     };
     showProgress();const progressTimer=setInterval(showProgress,1000);
     try{
-      const x=await jf(`/api/p/${pid}/courses/${cid}/documents`,{method:'POST',body:fd});
+      const x=await jf(`/api/p/${pid}/courses/${cid}/documents`,{method:'POST',body:fd,signal:documentUploadController.signal});
       if(PID!==pid||CID!==cid)return;
       const messages=[...x.added.map(d=>`${d.name}: ${d.warning||'추가 완료'}`),...(x.skipped||[]).map(d=>`${d.name}: 이미 보관된 자료`),...(x.errors||[]).map(d=>`${d.name}: ${d.message}`)];
       await openCourse(cid);$('#uploadStatus').textContent=messages.join('\n');
     }catch(e){
+      if(e.name==='AbortError'){
+        if(PID===pid&&CID===cid){
+          await openCourse(cid);
+          $('#uploadStatus').textContent='업로드 요청을 중단했어. 서버 처리가 먼저 끝난 자료가 있으면 목록에 표시돼.';
+        }
+        return;
+      }
       if(PID===pid&&CID===cid)$('#uploadStatus').textContent=e.message;
       throw e;
-    }finally{clearInterval(progressTimer);}
+    }finally{
+      clearInterval(progressTimer);documentUploadController=null;
+      if(cancelUploadButton){cancelUploadButton.disabled=true;cancelUploadButton.setAttribute('aria-disabled','true');}
+    }
   });
   showSelectedDocuments();
 };
