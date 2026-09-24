@@ -64,7 +64,32 @@ function annotationClick(e){const b=e.target.closest('button');if(!b||!ANNO)retu
 window.addEventListener('beforeunload',e=>{if(!ANNO?.dirty)return;e.preventDefault();e.returnValue='';});
 async function downloadFile(url,name){if(!ACCESS){const a=document.createElement('a');a.href=url;if(name)a.download=name;document.body.appendChild(a);a.click();a.remove();return;}const r=await fetch(url,{headers:{'X-App-Code':ACCESS}});if(!r.ok)throw Error('파일 다운로드에 실패했어.');const blob=await r.blob(),href=URL.createObjectURL(blob),a=document.createElement('a');a.href=href;a.download=name||'FOR-EST-document';a.click();setTimeout(()=>URL.revokeObjectURL(href),30000);}
 backup=async function(){try{await downloadFile(`/api/p/${PID}/backup`,`FOR-EST-${PROFILE.name}-backup.json`);}catch(e){alert(e.message);}};
-uploadDocs=async function(){const files=[...$('#files').files],pid=PID,cid=CID;if(!files.length)return alert('PDF 또는 이미지를 골라줘.');if(files.length>15)return alert('한 번에 15개까지 올릴 수 있어.');if(files.some(f=>f.size>40*1024*1024))return alert('파일당 40MB까지 올릴 수 있어.');const fd=new FormData();files.forEach(f=>fd.append('files',f));fd.append('document_type',$('#dtype').value);const button=document.querySelector('[onclick="uploadDocs()"]');await busy(button,async()=>{$('#uploadStatus').textContent='자료를 업로드하고 읽는 중이야. 이미지·스캔 PDF는 시간이 조금 걸릴 수 있어.';try{const x=await jf(`/api/p/${pid}/courses/${cid}/documents`,{method:'POST',body:fd});if(PID!==pid||CID!==cid)return;const messages=[...x.added.map(d=>`${d.name}: ${d.warning||'추가 완료'}`),...(x.skipped||[]).map(d=>`${d.name}: 이미 보관된 자료`),...(x.errors||[]).map(d=>`${d.name}: ${d.message}`)];await openCourse(cid);$('#uploadStatus').textContent=messages.join('\n');}catch(e){if(PID===pid&&CID===cid)$('#uploadStatus').textContent=e.message;throw e;}});};
+uploadDocs=async function(){
+  const files=[...$('#files').files],pid=PID,cid=CID;
+  if(!files.length)return alert('PDF 또는 이미지를 골라줘.');
+  if(files.length>15)return alert('한 번에 15개까지 올릴 수 있어.');
+  if(files.some(f=>f.size>40*1024*1024))return alert('파일당 40MB까지 올릴 수 있어.');
+  const fd=new FormData();files.forEach(f=>fd.append('files',f));fd.append('document_type',$('#dtype').value);
+  const button=document.querySelector('[onclick="uploadDocs()"]');
+  await busy(button,async()=>{
+    const started=Date.now(),status=$('#uploadStatus');
+    const showProgress=()=>{
+      if(PID!==pid||CID!==cid)return;
+      const seconds=Math.max(0,Math.floor((Date.now()-started)/1000));
+      status.textContent=`자료 ${files.length}개를 업로드하고 읽는 중 · ${seconds}초 경과 · 스캔·이미지 AI 읽기는 파일마다 최대 12초까지만 기다려.`;
+    };
+    showProgress();const progressTimer=setInterval(showProgress,1000);
+    try{
+      const x=await jf(`/api/p/${pid}/courses/${cid}/documents`,{method:'POST',body:fd});
+      if(PID!==pid||CID!==cid)return;
+      const messages=[...x.added.map(d=>`${d.name}: ${d.warning||'추가 완료'}`),...(x.skipped||[]).map(d=>`${d.name}: 이미 보관된 자료`),...(x.errors||[]).map(d=>`${d.name}: ${d.message}`)];
+      await openCourse(cid);$('#uploadStatus').textContent=messages.join('\n');
+    }catch(e){
+      if(PID===pid&&CID===cid)$('#uploadStatus').textContent=e.message;
+      throw e;
+    }finally{clearInterval(progressTimer);}
+  });
+};
 for(const name of ['makeQuiz','analyzePattern','gradeQuiz','askTutor']){const original=window[name];window[name]=async function(){const b=document.querySelector(`[onclick="${name}()"]`);return busy(b,()=>original());};}
 {
   const originalAnalyze=window.analyze;
