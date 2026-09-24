@@ -48,10 +48,10 @@ def test_annotation_close_saves_before_dismissal():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v39" in script
-    for asset in ["/app.css?v=21", "/app.js?v=32", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v40" in script
+    for asset in ["/app.css?v=21", "/app.js?v=33", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
-    assert 'src="/app.js?v=32"' in html
+    assert 'src="/app.js?v=33"' in html
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
     assert "caches.match('/')||caches.match('/offline.html')" in script
@@ -214,7 +214,8 @@ def test_active_recording_or_upload_blocks_accidental_navigation():
     assert "녹음 중에는 과목이나 사용자를 바꿀 수 없어" in app
     assert "자료 업로드 중에는 과목이나 사용자를 바꿀 수 없어" in app
     assert "녹음 파일 업로드 중에는 과목이나 사용자를 바꿀 수 없어" in app
-    assert "!ANNO?.dirty&&!REC?.active&&!documentUploadController&&!lectureUploadController" in app
+    assert "자동분석 중에는 과목이나 사용자를 바꿀 수 없어" in app
+    assert "!ANNO?.dirty&&!REC?.active&&!documentUploadController&&!lectureUploadController&&!analysisRunning" in app
 
 
 def test_mobile_touch_targets_remain_at_least_44px():

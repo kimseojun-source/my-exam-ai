@@ -1,5 +1,5 @@
 // Preserve the existing API, session cookie and local-storage keys.
-let viewEpoch=0,profilesById=new Map();
+let viewEpoch=0,profilesById=new Map(),analysisRunning=false;
 const originalJf=jf;
 jf=async function(url,opt={}){const match=url.match(/^\/api\/p\/(\d+)(?:\/courses\/(\d+))?/);const result=await originalJf(url,opt);if(match&&(Number(match[1])!==PID||(match[2]&&Number(match[2])!==CID)))throw Error('과목이 전환되어 이전 요청의 화면 갱신을 중단했어. 결과는 원래 과목에 보관돼.');return result;};
 loadProfiles=async function(){const ps=await jf('/api/profiles');profilesById=new Map(ps.map(p=>[p.id,p]));$('#profiles').innerHTML=ps.map(p=>`<button class="profile" data-profile-id="${p.id}"><div class="avatar">${esc((p.name||'U')[0])}</div><b>${esc(p.name)}</b><div class="mini">${p.is_owner?'소유자':'사용자'} · ${p.has_pin?'PIN 보호':'PIN 미설정'}</div></button>`).join('');$('#guestAdmin').classList.toggle('hidden',!PROFILE?.is_owner||ps.length>=2);};
@@ -18,6 +18,7 @@ function workspaceNavigationBlocked(){
   if(REC?.active){recordingStatus('녹음 중에는 과목이나 사용자를 바꿀 수 없어. 먼저 저장하거나 취소해줘.',true);return true;}
   if(documentUploadController){$('#uploadStatus').textContent='자료 업로드 중에는 과목이나 사용자를 바꿀 수 없어. 먼저 완료하거나 중단해줘.';return true;}
   if(lectureUploadController){recordingStatus('녹음 파일 업로드 중에는 과목이나 사용자를 바꿀 수 없어. 먼저 완료하거나 중단해줘.',true);return true;}
+  if(analysisRunning){$('#dashBody').innerHTML='<div role="status" aria-live="polite"><b>자동분석 중에는 과목이나 사용자를 바꿀 수 없어.</b><p class="mini">먼저 분석을 완료하거나 분석 취소를 눌러줘. 기존 결과와 자료는 그대로 유지돼.</p></div>';return true;}
   return false;
 }
 $('#courses').addEventListener('click',e=>{const course=e.target.closest('[data-course-id]');if(course&&!workspaceNavigationBlocked())openCourse(+course.dataset.courseId);});
@@ -69,7 +70,7 @@ async function saveAnnotations(){if(!ANNO)return;const a=ANNO;$('#annoStatus').t
 async function saveAndCloseAnnotator(button){if(!ANNO)return;const a=ANNO,old=button?.textContent;if(button){button.disabled=true;button.textContent=a.dirty?'저장 중…':'닫는 중…';}try{if(a.dirty)await saveAnnotations();if(ANNO===a)closeAnnotator();}catch(e){if(ANNO===a)$('#annoStatus').textContent=`저장하지 못했어: ${e.message}`;if(button&&button.isConnected){button.disabled=false;button.textContent=old;}}}
 async function changeAnnotationPage(delta){if(!ANNO)return;try{if(ANNO.dirty)await saveAnnotations();ANNO.page=Math.max(1,Math.min(ANNO.pages,ANNO.page+delta));await loadAnnotationPage();}catch(e){$('#annoStatus').textContent=e.message;}}
 function annotationClick(e){const b=e.target.closest('button');if(!b||!ANNO)return;if(b.dataset.annoClose!==undefined){saveAndCloseAnnotator(b);}else if(b.dataset.annoTool){ANNO.tool=b.dataset.annoTool;document.querySelectorAll('[data-anno-tool]').forEach(x=>x.classList.toggle('active',x===b));$('#annoText').classList.toggle('hidden',ANNO.tool!=='text');$('#annoCanvas').classList.toggle('eraser',ANNO.tool==='eraser');}else if(b.dataset.annoUndo!==undefined){ANNO.items.pop();ANNO.dirty=true;drawAnnotations();}else if(b.dataset.annoClear!==undefined&&confirm('이 페이지의 필기를 모두 지울까?')){ANNO.items=[];ANNO.dirty=true;drawAnnotations();}else if(b.dataset.annoPrev!==undefined)changeAnnotationPage(-1);else if(b.dataset.annoNext!==undefined)changeAnnotationPage(1);else if(b.dataset.annoSave!==undefined)saveAnnotations().catch(x=>$('#annoStatus').textContent=x.message);}
-window.addEventListener('beforeunload',e=>{if(!ANNO?.dirty&&!REC?.active&&!documentUploadController&&!lectureUploadController)return;e.preventDefault();e.returnValue='';});
+window.addEventListener('beforeunload',e=>{if(!ANNO?.dirty&&!REC?.active&&!documentUploadController&&!lectureUploadController&&!analysisRunning)return;e.preventDefault();e.returnValue='';});
 async function downloadFile(url,name){if(!ACCESS){const a=document.createElement('a');a.href=url;if(name)a.download=name;document.body.appendChild(a);a.click();a.remove();return;}const r=await fetch(url,{headers:{'X-App-Code':ACCESS}});if(!r.ok)throw Error('파일 다운로드에 실패했어.');const blob=await r.blob(),href=URL.createObjectURL(blob),a=document.createElement('a');a.href=href;a.download=name||'FOR-EST-document';a.click();setTimeout(()=>URL.revokeObjectURL(href),30000);}
 backup=async function(){try{await downloadFile(`/api/p/${PID}/backup`,`FOR-EST-${PROFILE.name}-backup.json`);}catch(e){alert(e.message);}};
 function showSelectedDocuments(){
@@ -134,7 +135,6 @@ uploadDocs=async function(){
 for(const name of ['makeQuiz','analyzePattern','gradeQuiz','askTutor']){const original=window[name];window[name]=async function(){const b=document.querySelector(`[onclick="${name}()"]`);return busy(b,()=>original());};}
 {
   const originalAnalyze=window.analyze;
-  let analysisRunning=false;
   const cancelButton=$('#cancelAnalysisButton');
   let cancelCurrentAnalysis=null;
   cancelButton?.addEventListener('click',()=>cancelCurrentAnalysis?.());
