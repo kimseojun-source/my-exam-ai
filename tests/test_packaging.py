@@ -47,7 +47,7 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v32" in script
+    assert "forest-shell-v33" in script
     for asset in ["/app.css?v=19", "/app.js?v=26", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
@@ -194,3 +194,12 @@ def test_empty_state_points_to_first_course_action():
     assert 'onclick="startFirstCourse()"' in html
     assert "input.scrollIntoView" in app
     assert "e.key==='Enter'" in app
+
+
+def test_course_creation_validates_and_reports_progress():
+    html = (ROOT / "static/index.html").read_text()
+    assert 'id="createCourseButton"' in html
+    assert 'id="courseCreateStatus"' in html
+    assert 'if(!name){status.textContent="과목명을 입력해줘."' in html
+    assert 'button.disabled=true;button.textContent="만드는 중…"' in html
+    assert 'if(button.disabled)return' in html

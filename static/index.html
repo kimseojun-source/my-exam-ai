@@ -55,9 +55,10 @@ label{font-size:12px;font-weight:850;display:block;margin:10px 0 5px}.row{displa
 
       <div class="card">
         <h2>새 과목</h2>
-        <label>과목명</label><input id="newName" placeholder="예: 경제학원론">
+        <label for="newName">과목명</label><input id="newName" maxlength="100" placeholder="예: 경제학원론" aria-describedby="courseCreateStatus">
         <label>시험일</label><input id="newDate" type="date">
-        <button class="primary" style="width:100%;margin-top:9px" onclick="createCourse()">과목 만들기</button>
+        <button id="createCourseButton" class="primary" style="width:100%;margin-top:9px" onclick="createCourse()">과목 만들기</button>
+        <div id="courseCreateStatus" class="mini" role="status" aria-live="polite" style="margin-top:7px"></div>
       </div>
 
       <div id="profileAdmin" class="card">
@@ -239,9 +240,14 @@ async function loadCourses(){
 }
 
 async function createCourse(){
-  let fd=new FormData();fd.append("name",$("#newName").value||"새 과목");fd.append("exam_date",$("#newDate").value);
-  try{let x=await jf(`/api/p/${PID}/courses`,{method:"POST",body:fd});$("#newName").value="";await openCourse(x.id);await loadCourses()}
-  catch(e){alert(e.message)}
+  const input=$("#newName"),button=$("#createCourseButton"),status=$("#courseCreateStatus"),name=input.value.trim();
+  if(button.disabled)return;
+  if(!name){status.textContent="과목명을 입력해줘.";input.focus();return}
+  const original=button.textContent,fd=new FormData();fd.append("name",name);fd.append("exam_date",$("#newDate").value);
+  button.disabled=true;button.textContent="만드는 중…";status.textContent="새 학습 공간을 만드는 중…";
+  try{const x=await jf(`/api/p/${PID}/courses`,{method:"POST",body:fd});input.value="";$("#newDate").value="";status.textContent=`${name} 과목을 만들었어.`;await openCourse(x.id)}
+  catch(e){status.textContent=`과목을 만들지 못했어: ${e.message}`}
+  finally{button.disabled=false;button.textContent=original}
 }
 
 async function openCourse(id){
