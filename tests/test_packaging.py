@@ -150,3 +150,13 @@ def test_mobile_forms_core_actions_and_timecoded_transcript():
     assert "loadInlineSource" in detail
     assert "@media(max-width:520px){.side{grid-template-columns:minmax(0,1fr)}" in styles
     assert "uvicorn forest_app:app" in dockerfile
+
+
+def test_document_selection_gives_immediate_mobile_feedback():
+    html = (ROOT / "static/index.html").read_text()
+    app = (ROOT / "static/app.js").read_text()
+    assert 'id="uploadStatus" role="status" aria-live="polite"' in html
+    assert "addEventListener('change',showSelectedDocuments)" in app
+    assert "한 번에 15개까지만" in app
+    assert "40MB를 넘는 파일" in app
+    assert "아래 자료 추가를 누르면 읽기를 시작해" in app

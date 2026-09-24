@@ -64,6 +64,17 @@ function annotationClick(e){const b=e.target.closest('button');if(!b||!ANNO)retu
 window.addEventListener('beforeunload',e=>{if(!ANNO?.dirty)return;e.preventDefault();e.returnValue='';});
 async function downloadFile(url,name){if(!ACCESS){const a=document.createElement('a');a.href=url;if(name)a.download=name;document.body.appendChild(a);a.click();a.remove();return;}const r=await fetch(url,{headers:{'X-App-Code':ACCESS}});if(!r.ok)throw Error('파일 다운로드에 실패했어.');const blob=await r.blob(),href=URL.createObjectURL(blob),a=document.createElement('a');a.href=href;a.download=name||'FOR-EST-document';a.click();setTimeout(()=>URL.revokeObjectURL(href),30000);}
 backup=async function(){try{await downloadFile(`/api/p/${PID}/backup`,`FOR-EST-${PROFILE.name}-backup.json`);}catch(e){alert(e.message);}};
+function showSelectedDocuments(){
+  const input=$('#files'),status=$('#uploadStatus'),files=[...(input?.files||[])];
+  if(!status)return;
+  if(!files.length){status.textContent='';return;}
+  const totalMb=files.reduce((sum,file)=>sum+file.size,0)/1024/1024;
+  const tooMany=files.length>15,tooLarge=files.some(file=>file.size>40*1024*1024);
+  if(tooMany)status.textContent=`${files.length}개가 선택됐어. 한 번에 15개까지만 올릴 수 있어.`;
+  else if(tooLarge)status.textContent=`${files.length}개 · 총 ${totalMb.toFixed(1)}MB 선택됨. 40MB를 넘는 파일은 제외하고 다시 선택해줘.`;
+  else status.textContent=`자료 ${files.length}개 · 총 ${totalMb.toFixed(1)}MB 선택됨. 아래 자료 추가를 누르면 읽기를 시작해.`;
+}
+$('#files')?.addEventListener('change',showSelectedDocuments);
 uploadDocs=async function(){
   const files=[...$('#files').files],pid=PID,cid=CID;
   if(!files.length)return alert('PDF 또는 이미지를 골라줘.');

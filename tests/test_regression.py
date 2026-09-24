@@ -179,7 +179,7 @@ def test_vision_request_schema_and_rotation(monkeypatch):
    assert kwargs['input'][0]['content'][1]['type']=='input_image'
    assert kwargs['input'][0]['content'][1]['image_url'].startswith('data:image/jpeg;base64,')
    return type('Result',(),{'output_text':json.dumps({'pages':[{'page':1,'text':'a visible note'}]})})()
- monkeypatch.setattr(server,'client',lambda:type('Client',(),{'responses':Responses()})())
+ monkeypatch.setattr(server,'client',lambda **_:type('Client',(),{'responses':Responses()})())
  path=server.DATA_ROOT/'fixture.png';path.write_bytes(image_bytes())
  assert server.visual_image_notes(path)==[{'page':1,'text':'a visible note'}]
 
