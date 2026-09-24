@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v31" in script
-    for asset in ["/app.css?v=19", "/app.js?v=25", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v32" in script
+    for asset in ["/app.css?v=19", "/app.js?v=26", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -186,3 +186,11 @@ def test_network_loss_and_recovery_are_explained():
     assert "addEventListener('online'" in app
     assert "인터넷 연결이 끊겼어" in app
     assert "인터넷 연결이 복구됐어" in app
+
+
+def test_empty_state_points_to_first_course_action():
+    html = (ROOT / "static/index.html").read_text()
+    app = (ROOT / "static/app.js").read_text()
+    assert 'onclick="startFirstCourse()"' in html
+    assert "input.scrollIntoView" in app
+    assert "e.key==='Enter'" in app
