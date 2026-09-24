@@ -120,7 +120,8 @@ label{font-size:12px;font-weight:850;display:block;margin:10px 0 5px}.row{displa
                 <div class="recording-upload">
                   <div><span class="recorder-kicker">IMPORT AUDIO</span><label for="lectureAudio">기존 녹음 파일 분석</label><p class="mini">MP3·M4A·WAV·WebM·OGG·AAC · AI 자막 파일당 24MB까지</p></div>
                   <input id="lectureAudio" type="file" accept="audio/*,.mp3,.m4a,.wav,.webm,.ogg,.aac">
-                  <button id="uploadLecture" class="soft" type="button" onclick="uploadLectureAudio()">파일 분석하기</button>
+                  <button id="uploadLecture" class="soft" type="button" onclick="uploadLectureAudio()" disabled>파일 분석하기</button>
+                  <p id="audioSelectionStatus" class="mini" role="status" aria-live="polite"></p>
                 </div>
                 <div class="transcript-head"><b>실시간 자막</b><span>말한 내용이 시간순으로 기록돼</span></div>
                 <div id="liveTranscript" class="live-transcript" aria-live="polite"><span class="sub">녹음을 시작하면 자막이 여기에 표시돼.</span></div>

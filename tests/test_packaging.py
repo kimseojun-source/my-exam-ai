@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v35" in script
-    for asset in ["/app.css?v=20", "/app.js?v=28", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v36" in script
+    for asset in ["/app.css?v=20", "/app.js?v=29", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -181,6 +181,17 @@ def test_document_upload_can_be_stopped_without_hiding_partial_results():
     assert "서버 처리가 먼저 끝난 자료가 있으면 목록에 표시돼" in app
     assert "if(!uploadStopped)showSelectedDocuments()" in app
     assert "같은 파일로 다시 시도할 수 있어" in app
+
+
+def test_audio_selection_explains_size_before_upload():
+    html = (ROOT / "static/index.html").read_text()
+    app = (ROOT / "static/app.js").read_text()
+    assert 'id="uploadLecture"' in html and 'onclick="uploadLectureAudio()" disabled' in html
+    assert 'id="audioSelectionStatus"' in html
+    assert "addEventListener('change',showSelectedLectureAudio)" in app
+    assert "24MB를 넘어 AI 자막을 만들 수 없어" in app
+    assert "파일 분석하기를 누르면 시간 자막을 만들기 시작해" in app
+    assert "finally{showSelectedLectureAudio();}" in app
 
 
 def test_mobile_touch_targets_remain_at_least_44px():
