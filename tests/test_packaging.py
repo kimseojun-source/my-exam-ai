@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v28" in script
-    for asset in ["/app.css?v=18", "/app.js?v=22", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v29" in script
+    for asset in ["/app.css?v=19", "/app.js?v=23", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -171,3 +171,13 @@ def test_mobile_touch_targets_remain_at_least_44px():
     assert ".lecture-delete{flex:none;min-height:44px" in styles
     assert ".annotation-toolbar button{min-height:44px}" in styles
     assert ".annotation-sheet footer button{min-height:44px}" in styles
+
+
+def test_network_loss_and_recovery_are_explained():
+    html = (ROOT / "static/index.html").read_text()
+    app = (ROOT / "static/app.js").read_text()
+    assert 'id="networkStatus"' in html
+    assert "addEventListener('offline'" in app
+    assert "addEventListener('online'" in app
+    assert "인터넷 연결이 끊겼어" in app
+    assert "인터넷 연결이 복구됐어" in app
