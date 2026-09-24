@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v26" in script
-    for asset in ["/app.css?v=17", "/app.js?v=21", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v27" in script
+    for asset in ["/app.css?v=17", "/app.js?v=22", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -160,3 +160,6 @@ def test_document_selection_gives_immediate_mobile_feedback():
     assert "한 번에 15개까지만" in app
     assert "40MB를 넘는 파일" in app
     assert "아래 자료 추가를 누르면 읽기를 시작해" in app
+    assert 'onclick="uploadDocs()" disabled' in html
+    assert "button.disabled=tooMany||tooLarge" in app
+    assert "if(button)button.disabled=true" in app

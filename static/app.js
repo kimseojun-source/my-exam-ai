@@ -15,7 +15,7 @@ loadCourses=async function(){
   }
 };
 $('#courses').addEventListener('click',e=>{const course=e.target.closest('[data-course-id]');if(course)openCourse(+course.dataset.courseId);});
-function resetCourseView(){QUIZ=null;CARDS=[];CI=0;CB=false;COURSE=null;A={};for(const id of ['chat','ask','quizBody','sumBody','extBody','patternBody','cardBox','documentList','uploadStatus','lectureList','liveTranscript','lectureNote']){const el=$('#'+id);if(!el)continue;if(el.tagName==='TEXTAREA'||el.tagName==='INPUT')el.value='';else el.innerHTML='';}$('#files').value='';$('#lectureNote')?.classList.add('hidden');$('#coreDetailModal')?.classList.add('hidden');pane('dash',document.querySelector('.tab'));}
+function resetCourseView(){QUIZ=null;CARDS=[];CI=0;CB=false;COURSE=null;A={};for(const id of ['chat','ask','quizBody','sumBody','extBody','patternBody','cardBox','documentList','uploadStatus','lectureList','liveTranscript','lectureNote']){const el=$('#'+id);if(!el)continue;if(el.tagName==='TEXTAREA'||el.tagName==='INPUT')el.value='';else el.innerHTML='';}$('#files').value='';const uploadButton=document.querySelector('[onclick="uploadDocs()"]');if(uploadButton)uploadButton.disabled=true;$('#lectureNote')?.classList.add('hidden');$('#coreDetailModal')?.classList.add('hidden');pane('dash',document.querySelector('.tab'));}
 openCourse=async function(id){const epoch=++viewEpoch;CID=id;resetCourseView();$('#ws').classList.add('hidden');try{const course=await jf(`/api/p/${PID}/courses/${id}`);if(epoch!==viewEpoch||CID!==id)return;COURSE=course;A=course.analysis||{};$('#empty').classList.add('hidden');$('#ws').classList.remove('hidden');$('#ctitle').textContent=course.name;render();await loadCourses();sessionStorage.setItem(`forest_course_${PID}`,String(id));}catch(e){if(epoch===viewEpoch)alert(e.message);}};
 const originalSwitch=switchProfile;switchProfile=async function(){++viewEpoch;resetCourseView();await originalSwitch();};const originalShow=showApp;showApp=function(){originalShow();$('#guestAdmin').classList.toggle('hidden',!PROFILE.is_owner||profilesById.size>=2);};const originalRender=render;
 render=function(){$('#chat').innerHTML=(COURSE.tutor_history||[]).map(m=>`<div class="bubble ${m.role==='user'?'me':'ai'}">${esc(m.content)}</div>`).join('');renderPattern(COURSE.exam_pattern);originalRender();renderStudyDashboard();$('#documentList').innerHTML=COURSE.documents.map(d=>`<div class="document"><div class="document-head"><b>${esc(d.name)}</b><button class="document-delete" data-delete-document="${d.id}" data-document-name="${esc(d.name)}">삭제</button></div><div class="src">${d.pages}p · ${d.extraction==='pending_vision'?'원본 보관 · AI 읽기 대기':esc(d.extraction)}</div><div class="row"><button class="primary" data-annotate="${d.id}" data-pages="${d.pages}">필기하기</button><button class="ghost" data-download="${d.id}">원본 받기</button><button class="soft" data-reprocess="${d.id}">다시 읽기</button></div></div>`).join('');loadLectures().catch(e=>{$('#lectureList').innerHTML=`<div class="mini">저장된 녹음을 불러오지 못했어: ${esc(e.message)}</div>`;});};
@@ -65,11 +65,12 @@ window.addEventListener('beforeunload',e=>{if(!ANNO?.dirty)return;e.preventDefau
 async function downloadFile(url,name){if(!ACCESS){const a=document.createElement('a');a.href=url;if(name)a.download=name;document.body.appendChild(a);a.click();a.remove();return;}const r=await fetch(url,{headers:{'X-App-Code':ACCESS}});if(!r.ok)throw Error('파일 다운로드에 실패했어.');const blob=await r.blob(),href=URL.createObjectURL(blob),a=document.createElement('a');a.href=href;a.download=name||'FOR-EST-document';a.click();setTimeout(()=>URL.revokeObjectURL(href),30000);}
 backup=async function(){try{await downloadFile(`/api/p/${PID}/backup`,`FOR-EST-${PROFILE.name}-backup.json`);}catch(e){alert(e.message);}};
 function showSelectedDocuments(){
-  const input=$('#files'),status=$('#uploadStatus'),files=[...(input?.files||[])];
+  const input=$('#files'),status=$('#uploadStatus'),button=document.querySelector('[onclick="uploadDocs()"]'),files=[...(input?.files||[])];
   if(!status)return;
-  if(!files.length){status.textContent='';return;}
+  if(!files.length){status.textContent='';if(button)button.disabled=true;return;}
   const totalMb=files.reduce((sum,file)=>sum+file.size,0)/1024/1024;
   const tooMany=files.length>15,tooLarge=files.some(file=>file.size>40*1024*1024);
+  if(button)button.disabled=tooMany||tooLarge;
   if(tooMany)status.textContent=`${files.length}개가 선택됐어. 한 번에 15개까지만 올릴 수 있어.`;
   else if(tooLarge)status.textContent=`${files.length}개 · 총 ${totalMb.toFixed(1)}MB 선택됨. 40MB를 넘는 파일은 제외하고 다시 선택해줘.`;
   else status.textContent=`자료 ${files.length}개 · 총 ${totalMb.toFixed(1)}MB 선택됨. 아래 자료 추가를 누르면 읽기를 시작해.`;
@@ -100,6 +101,7 @@ uploadDocs=async function(){
       throw e;
     }finally{clearInterval(progressTimer);}
   });
+  showSelectedDocuments();
 };
 for(const name of ['makeQuiz','analyzePattern','gradeQuiz','askTutor']){const original=window[name];window[name]=async function(){const b=document.querySelector(`[onclick="${name}()"]`);return busy(b,()=>original());};}
 {
