@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v29" in script
-    for asset in ["/app.css?v=19", "/app.js?v=23", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v30" in script
+    for asset in ["/app.css?v=19", "/app.js?v=24", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -97,6 +97,9 @@ def test_recording_ui_and_native_microphone_bridge():
     assert "cancelLectureRecording" in script
     assert 'id="pauseRecording"' in html
     assert "toggleLectureRecordingPause" in script
+    assert 'id="retryCaptions"' in html
+    assert "retryRealtimeCaptions" in script
+    assert "실시간 자막 다시 연결 중" in script
     assert "data-delete-lecture" in script
     assert "confirm_saved=true" in script
     assert "data-delete-document" in script
