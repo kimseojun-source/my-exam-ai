@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v27" in script
-    for asset in ["/app.css?v=17", "/app.js?v=22", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v28" in script
+    for asset in ["/app.css?v=18", "/app.js?v=22", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -163,3 +163,11 @@ def test_document_selection_gives_immediate_mobile_feedback():
     assert 'onclick="uploadDocs()" disabled' in html
     assert "button.disabled=tooMany||tooLarge" in app
     assert "if(button)button.disabled=true" in app
+
+
+def test_mobile_touch_targets_remain_at_least_44px():
+    styles = (ROOT / "static/app.css").read_text()
+    assert ".document-delete{flex:none;min-height:44px" in styles
+    assert ".lecture-delete{flex:none;min-height:44px" in styles
+    assert ".annotation-toolbar button{min-height:44px}" in styles
+    assert ".annotation-sheet footer button{min-height:44px}" in styles
