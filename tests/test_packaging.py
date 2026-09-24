@@ -47,8 +47,8 @@ def test_annotation_close_saves_before_dismissal():
 
 def test_pwa_offline_cache_contains_only_public_shell():
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v37" in script
-    for asset in ["/app.css?v=21", "/app.js?v=30", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v38" in script
+    for asset in ["/app.css?v=21", "/app.js?v=31", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -202,6 +202,15 @@ def test_audio_upload_can_be_stopped_and_retried():
     assert "signal:lectureUploadController.signal" in app
     assert "lectureUploadController?.abort()" in app
     assert "녹음 파일 업로드를 중단했어. 파일 선택은 유지했어." in app
+
+
+def test_active_recording_blocks_accidental_navigation():
+    app = (ROOT / "static/app.js").read_text()
+    assert "function recordingNavigationBlocked()" in app
+    assert "if(course&&!recordingNavigationBlocked())openCourse" in app
+    assert "switchProfile=async function(){if(recordingNavigationBlocked())return;" in app
+    assert "녹음 중에는 과목이나 사용자를 바꿀 수 없어" in app
+    assert "!ANNO?.dirty&&!REC?.active" in app
 
 
 def test_mobile_touch_targets_remain_at_least_44px():
