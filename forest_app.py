@@ -502,6 +502,10 @@ def backup_v3(pid:int):
         for lecture in lectures:data['transcript_segments'] += [dict(x) for x in con.execute('SELECT * FROM transcript_segments WHERE lecture_id=?',(lecture['id'],)).fetchall()]
     con.commit();con.close();return JSONResponse(data,headers={'Content-Disposition':f'attachment; filename="forest_profile_{pid}_backup_v3.json"'})
 
+@app.get('/favicon.ico',include_in_schema=False)
+def favicon():
+    return FileResponse(server.BASE/'static'/'icons'/'icon-192.png',media_type='image/png',headers={'Cache-Control':'public, max-age=86400'})
+
 # server.py mounts static files at '/'. Keep that catch-all route last so the
 # extension APIs above remain reachable when uvicorn starts forest_app:app.
 _static_mounts=[route for route in app.router.routes if isinstance(route,Mount) and getattr(route,'name',None)=='static']
