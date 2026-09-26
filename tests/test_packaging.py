@@ -48,11 +48,11 @@ def test_annotation_close_saves_before_dismissal():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v43" in script
-    for asset in ["/app.css?v=23", "/app.js?v=35", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v44" in script
+    for asset in ["/app.css?v=24", "/app.js?v=35", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert 'src="/app.js?v=35"' in html
-    assert 'href="/app.css?v=23"' in html
+    assert 'href="/app.css?v=24"' in html
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
     assert "caches.match('/')||caches.match('/offline.html')" in script
@@ -263,3 +263,4 @@ def test_document_scroll_tracks_visible_page_for_return_to_annotation():
     assert "페이지 · 스크롤 보기" in app
     assert "a.scrollPositionObserver?.disconnect()" in app
     assert "touch-action:pan-y pinch-zoom" in styles
+    assert ".annotation-scroll-heading{position:sticky;top:0" in styles
