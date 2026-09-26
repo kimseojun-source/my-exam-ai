@@ -48,10 +48,10 @@ def test_annotation_close_saves_before_dismissal():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v45" in script
-    for asset in ["/app.css?v=24", "/app.js?v=36", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v46" in script
+    for asset in ["/app.css?v=24", "/app.js?v=37", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
-    assert 'src="/app.js?v=36"' in html
+    assert 'src="/app.js?v=37"' in html
     assert 'href="/app.css?v=24"' in html
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -267,3 +267,12 @@ def test_document_scroll_tracks_visible_page_for_return_to_annotation():
     assert 'aria-label="${index+1}페이지 필기하기"' in app
     assert "button.focus({preventScroll:true})" in app
     assert "setAttribute('aria-current','page')" in app
+
+
+def test_annotation_dialog_supports_safe_keyboard_dismissal():
+    app = (ROOT / "static/app.js").read_text()
+    assert "root.addEventListener('keydown',annotationKeydown)" in app
+    assert "if(e.key!=='Escape'||e.isComposing||!ANNO)return" in app
+    assert "saveAndCloseAnnotator(document.querySelector('[data-anno-close]'))" in app
+    assert "root.querySelector('[data-anno-tool]')?.focus({preventScroll:true})" in app
+    assert "if(!ANNO||button?.disabled)return" in app
