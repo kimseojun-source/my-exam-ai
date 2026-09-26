@@ -48,10 +48,11 @@ def test_annotation_close_saves_before_dismissal():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v40" in script
-    for asset in ["/app.css?v=21", "/app.js?v=33", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v41" in script
+    for asset in ["/app.css?v=22", "/app.js?v=34", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
-    assert 'src="/app.js?v=33"' in html
+    assert 'src="/app.js?v=34"' in html
+    assert 'href="/app.css?v=22"' in html
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
     assert "caches.match('/')||caches.match('/offline.html')" in script
