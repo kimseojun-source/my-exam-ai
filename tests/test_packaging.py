@@ -50,10 +50,10 @@ def test_annotation_close_saves_before_dismissal():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v53" in script
-    for asset in ["/app.css?v=25", "/app.js?v=42", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v54" in script
+    for asset in ["/app.css?v=25", "/app.js?v=43", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
-    assert 'src="/app.js?v=42"' in html
+    assert 'src="/app.js?v=43"' in html
     assert 'href="/app.css?v=25"' in html
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -89,6 +89,7 @@ def test_study_materials_scroll_continuously_and_keep_page_specific_editing():
     assert "openAnnotator(doc.id,doc.pages,doc.name,page)" in shell
     assert "await toggleAnnotationScroll();root.querySelector('[data-anno-scroll]')" in app
     assert 'data-anno-edit="${index+1}"' in app
+    assert 'data-annotate="${d.id}" data-pages="${d.pages}">자료 보기</button>' in app
 
 
 def test_short_last_page_is_selected_when_scrolled_to_bottom():
