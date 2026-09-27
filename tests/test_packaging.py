@@ -48,11 +48,11 @@ def test_annotation_close_saves_before_dismissal():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v48" in script
-    for asset in ["/app.css?v=24", "/app.js?v=39", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v49" in script
+    for asset in ["/app.css?v=25", "/app.js?v=40", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
-    assert 'src="/app.js?v=39"' in html
-    assert 'href="/app.css?v=24"' in html
+    assert 'src="/app.js?v=40"' in html
+    assert 'href="/app.css?v=25"' in html
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
     assert "caches.match('/')||caches.match('/offline.html')" in script
@@ -289,3 +289,15 @@ def test_annotation_dialog_supports_keyboard_tool_shortcuts():
     assert "{p:'pen',h:'highlighter',e:'eraser',t:'text'}[key]" in app
     assert "(e.ctrlKey||e.metaKey)&&key==='s'" in app
     assert "!editing&&!ANNO.scrollMode" in app
+
+
+def test_annotation_scroll_supports_direct_page_jump():
+    app = (ROOT / "static/app.js").read_text()
+    styles = (ROOT / "static/app.css").read_text()
+    assert 'id="annoJump" type="number" min="1" inputmode="numeric"' in app
+    assert "$('#annoJump').max=a.pages" in app
+    assert "function jumpAnnotationPage()" in app
+    assert "Math.max(1,Math.min(ANNO.pages" in app
+    assert "e.key==='Enter'&&e.target.id==='annoJump'" in app
+    assert "data-anno-jump" in app
+    assert ".annotation-page-jump input{width:64px;min-height:44px" in styles
