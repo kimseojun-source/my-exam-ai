@@ -48,10 +48,10 @@ def test_annotation_close_saves_before_dismissal():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v50" in script
-    for asset in ["/app.css?v=25", "/app.js?v=41", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v51" in script
+    for asset in ["/app.css?v=25", "/app.js?v=42", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
-    assert 'src="/app.js?v=41"' in html
+    assert 'src="/app.js?v=42"' in html
     assert 'href="/app.css?v=25"' in html
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -62,8 +62,8 @@ def test_study_first_workspace_is_cached_and_keeps_management_in_drawer():
     html = (ROOT / "static/index.html").read_text()
     shell = (ROOT / "static/workspace.js").read_text()
     styles = (ROOT / "static/workspace.css").read_text()
-    assert '/workspace.js?v=3' in html
-    assert '/workspace.css?v=3' in html
+    assert '/workspace.js?v=4' in html
+    assert '/workspace.css?v=4' in html
     assert "studyDrawer" in shell
     assert "event.target===drawer" in shell
     assert "aria-expanded" in shell
@@ -73,6 +73,20 @@ def test_study_first_workspace_is_cached_and_keeps_management_in_drawer():
     assert "openAnnotator(doc.id,doc.pages,doc.name,page)" in shell
     assert "@media(max-width:700px)" in styles
     assert "data-view=source" in styles
+
+
+def test_study_materials_scroll_continuously_and_keep_page_specific_editing():
+    shell = (ROOT / "static/workspace.js").read_text()
+    app = (ROOT / "static/app.js").read_text()
+    assert 'data-prev' not in shell and 'data-next' not in shell
+    assert 'data-source-page="${i+1}"' in shell
+    assert "observer=new IntersectionObserver" in shell
+    assert "rootMargin:'400px 0px'" in shell
+    assert "stage.addEventListener('scroll'" in shell
+    assert "scrollToPage(page)" in shell
+    assert "openAnnotator(doc.id,doc.pages,doc.name,page)" in shell
+    assert "await toggleAnnotationScroll();root.querySelector('[data-anno-scroll]')" in app
+    assert 'data-anno-edit="${index+1}"' in app
 
 
 def test_installed_pwa_has_branded_launch_animation():
@@ -274,7 +288,7 @@ def test_annotation_dialog_supports_safe_keyboard_dismissal():
     assert "root.addEventListener('keydown',annotationKeydown)" in app
     assert "if(e.key==='Escape')" in app
     assert "saveAndCloseAnnotator(document.querySelector('[data-anno-close]'))" in app
-    assert "root.querySelector('[data-anno-tool]')?.focus({preventScroll:true})" in app
+    assert "root.querySelector('[data-anno-scroll]')?.focus({preventScroll:true})" in app
     assert "if(!ANNO||button?.disabled)return" in app
     assert "if(e.key!=='Tab')return" in app
     assert "e.currentTarget.querySelectorAll('button:not([disabled]),input:not([disabled])')" in app
