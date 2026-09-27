@@ -56,7 +56,7 @@ def test_annotation_close_label_matches_read_or_edit_mode():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v55" in script
+    assert "forest-shell-v56" in script
     for asset in ["/app.css?v=25", "/app.js?v=44", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert 'src="/app.js?v=44"' in html
@@ -70,7 +70,7 @@ def test_study_first_workspace_is_cached_and_keeps_management_in_drawer():
     html = (ROOT / "static/index.html").read_text()
     shell = (ROOT / "static/workspace.js").read_text()
     styles = (ROOT / "static/workspace.css").read_text()
-    assert '/workspace.js?v=6' in html
+    assert '/workspace.js?v=7' in html
     assert '/workspace.css?v=4' in html
     assert "studyDrawer" in shell
     assert "event.target===drawer" in shell
@@ -96,6 +96,15 @@ def test_study_materials_scroll_continuously_and_keep_page_specific_editing():
     assert "await toggleAnnotationScroll();root.querySelector('[data-anno-scroll]')" in app
     assert 'data-anno-edit="${index+1}"' in app
     assert 'data-annotate="${d.id}" data-pages="${d.pages}">자료 보기</button>' in app
+
+
+def test_scrolling_page_previews_explain_loading_and_retry_accessibly():
+    shell = (ROOT / "static/workspace.js").read_text()
+    assert "state.preview.setAttribute('aria-busy','true')" in shell
+    assert "state.preview.setAttribute('aria-busy','false')" in shell
+    assert "`${number}페이지를 불러오는 중…`" in shell
+    assert "${number}페이지를 불러오지 못했어." in shell
+    assert 'aria-label="${number}페이지 다시 시도"' in shell
 
 
 def test_short_last_page_is_selected_when_scrolled_to_bottom():
