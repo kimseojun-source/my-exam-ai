@@ -56,10 +56,10 @@ def test_annotation_close_label_matches_read_or_edit_mode():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v56" in script
-    for asset in ["/app.css?v=25", "/app.js?v=44", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v57" in script
+    for asset in ["/app.css?v=25", "/app.js?v=45", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
-    assert 'src="/app.js?v=44"' in html
+    assert 'src="/app.js?v=45"' in html
     assert 'href="/app.css?v=25"' in html
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -105,6 +105,15 @@ def test_scrolling_page_previews_explain_loading_and_retry_accessibly():
     assert "`${number}페이지를 불러오는 중…`" in shell
     assert "${number}페이지를 불러오지 못했어." in shell
     assert 'aria-label="${number}페이지 다시 시도"' in shell
+
+
+def test_annotation_scroll_previews_share_page_specific_loading_and_retry_states():
+    app = (ROOT / "static/app.js").read_text()
+    assert "state.preview.setAttribute('aria-busy','true')" in app
+    assert "state.preview.setAttribute('aria-busy','false')" in app
+    assert "`${page}페이지를 불러오는 중…`" in app
+    assert 'aria-label="${page}페이지 다시 시도"' in app
+    assert "showAnnotationScrollError(state,page,'불러오지 못했어.')" in app
 
 
 def test_short_last_page_is_selected_when_scrolled_to_bottom():

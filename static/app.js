@@ -62,21 +62,23 @@ function closeAnnotator(){if(!ANNO)return;const a=ANNO;stopAnnotationScroll(a);a
 function annotationBase(){return `/api/p/${ANNO.pid}/courses/${ANNO.cid}/documents/${ANNO.did}`;}
 function releaseScrollPreview(state){
   state.controller?.abort();state.controller=null;
-  if(state.url){state.preview.style.height=`${state.preview.offsetHeight}px`;state.preview.replaceChildren();URL.revokeObjectURL(state.url);state.url=null;state.preview.textContent='페이지를 불러오는 중…';}
+  if(state.url){state.preview.style.height=`${state.preview.offsetHeight}px`;state.preview.replaceChildren();URL.revokeObjectURL(state.url);state.url=null;}
+  state.preview.setAttribute('aria-busy','false');state.preview.textContent=`${state.page}페이지로 다시 스크롤하면 불러와`;
 }
 function stopAnnotationScroll(a){a.scrollObserver?.disconnect();a.scrollObserver=null;a.scrollPositionObserver?.disconnect();a.scrollPositionObserver=null;a.scrollRatios=null;for(const state of a.scrollPreviews?.values()||[])releaseScrollPreview(state);a.scrollPreviews=null;a.scrollMode=false;}
+function showAnnotationScrollError(state,page,message){state.preview.setAttribute('aria-busy','false');state.preview.innerHTML=`<span role="alert">${page}페이지를 ${message}</span> <button class="ghost" data-anno-retry="${page}" aria-label="${page}페이지 다시 시도">다시 시도</button>`;}
 async function loadScrollPreview(a,section){
   const page=Number(section.dataset.scrollPage),state=a.scrollPreviews?.get(page);
   if(!state||state.url||state.controller)return;
-  const controller=new AbortController();state.controller=controller;state.preview.textContent='페이지를 불러오는 중…';
+  const controller=new AbortController();state.controller=controller;state.preview.setAttribute('aria-busy','true');state.preview.textContent=`${page}페이지를 불러오는 중…`;
   try{
     const response=await fetch(`/api/p/${a.pid}/courses/${a.cid}/documents/${a.did}/preview?page=${page}`,{headers:ACCESS?{'X-App-Code':ACCESS}:{},signal:controller.signal});
     if(!response.ok)throw Error('페이지를 불러오지 못했어.');
     const url=URL.createObjectURL(await response.blob());
     if(ANNO!==a||!a.scrollMode||state.controller!==controller){URL.revokeObjectURL(url);return;}
-    const img=document.createElement('img');img.alt=`자료 ${page}페이지`;img.onload=()=>{if(state.url===url){state.preview.style.height='';state.preview.style.minHeight='0';}};img.onerror=()=>{if(state.url!==url)return;releaseScrollPreview(state);state.preview.innerHTML=`<span>${page}페이지를 표시하지 못했어.</span> <button class="ghost" data-anno-retry="${page}">다시 시도</button>`;};
+    const img=document.createElement('img');img.alt=`자료 ${page}페이지`;img.onload=()=>{if(state.url===url){state.preview.setAttribute('aria-busy','false');state.preview.style.height='';state.preview.style.minHeight='0';}};img.onerror=()=>{if(state.url!==url)return;releaseScrollPreview(state);showAnnotationScrollError(state,page,'표시하지 못했어.');};
     state.url=url;state.preview.replaceChildren(img);img.src=url;
-  }catch(e){if(e.name!=='AbortError'&&ANNO===a&&a.scrollMode&&state.controller===controller)state.preview.innerHTML=`<span>${page}페이지를 불러오지 못했어.</span> <button class="ghost" data-anno-retry="${page}">다시 시도</button>`;}
+  }catch(e){if(e.name!=='AbortError'&&ANNO===a&&a.scrollMode&&state.controller===controller)showAnnotationScrollError(state,page,'불러오지 못했어.');}
   finally{if(state.controller===controller)state.controller=null;}
 }
 async function toggleAnnotationScroll(editPage=null){
@@ -86,8 +88,8 @@ async function toggleAnnotationScroll(editPage=null){
   try{if(a.dirty)await saveAnnotations();}catch(e){$('#annoStatus').textContent=`필기를 저장하지 못했어: ${e.message}`;return;}
   if(ANNO!==a)return;
   a.scrollMode=true;a.scrollPage=a.page;a.scrollPreviews=new Map();a.scrollRatios=new Map();stage.classList.add('scroll-mode');pages.classList.remove('hidden');jump.classList.remove('hidden');$('#annoJump').max=a.pages;$('#annoJump').value=a.page;$('#annoJump').setAttribute('aria-label',`이동할 페이지, 총 ${a.pages}페이지`);$('#annoJumpMax').textContent=a.pages;button.textContent='현재 페이지 필기';button.setAttribute('aria-pressed','true');close.textContent='닫기';$('.annotation-toolbar').classList.add('hidden');$('.annotation-sheet footer').classList.add('hidden');stage.scrollTop=0;$('#annoPage').textContent=` ${a.scrollPage} / ${a.pages}페이지 · 스크롤 보기`;
-  pages.innerHTML=Array.from({length:a.pages},(_,index)=>`<section class="annotation-scroll-page" data-scroll-page="${index+1}" aria-label="${index+1}페이지"${index+1===a.page?' aria-current="page"':''}><div class="annotation-scroll-heading"><b>${index+1} / ${a.pages}페이지</b><button class="ghost" data-anno-edit="${index+1}" aria-label="${index+1}페이지 필기하기">이 페이지 필기</button></div><div class="annotation-scroll-preview">페이지를 불러오는 중…</div></section>`).join('');
-  for(const section of pages.children){const page=Number(section.dataset.scrollPage);a.scrollPreviews.set(page,{preview:section.querySelector('.annotation-scroll-preview'),controller:null,url:null});}
+  pages.innerHTML=Array.from({length:a.pages},(_,index)=>`<section class="annotation-scroll-page" data-scroll-page="${index+1}" aria-label="${index+1}페이지"${index+1===a.page?' aria-current="page"':''}><div class="annotation-scroll-heading"><b>${index+1} / ${a.pages}페이지</b><button class="ghost" data-anno-edit="${index+1}" aria-label="${index+1}페이지 필기하기">이 페이지 필기</button></div><div class="annotation-scroll-preview" aria-label="${index+1}페이지 미리보기" aria-busy="false">${index+1}페이지로 스크롤하면 불러와</div></section>`).join('');
+  for(const section of pages.children){const page=Number(section.dataset.scrollPage);a.scrollPreviews.set(page,{page,preview:section.querySelector('.annotation-scroll-preview'),controller:null,url:null});}
   a.scrollObserver=new IntersectionObserver(entries=>{for(const entry of entries){const state=a.scrollPreviews?.get(Number(entry.target.dataset.scrollPage));if(!state)continue;if(entry.isIntersecting)loadScrollPreview(a,entry.target);else releaseScrollPreview(state);}},{root:stage,rootMargin:'350px 0px'});
   a.scrollPositionObserver=new IntersectionObserver(entries=>{for(const entry of entries)a.scrollRatios?.set(Number(entry.target.dataset.scrollPage),entry.isIntersecting?entry.intersectionRatio:0);let current=a.scrollPage,best=-1;for(const [page,ratio] of a.scrollRatios||[]){if(ratio>best){current=page;best=ratio;}}if(best>0&&current!==a.scrollPage){pages.querySelector('[aria-current="page"]')?.removeAttribute('aria-current');pages.querySelector(`[data-scroll-page="${current}"]`)?.setAttribute('aria-current','page');a.scrollPage=current;rememberAnnotationPage(a);if(document.activeElement!==$('#annoJump'))$('#annoJump').value=current;$('#annoPage').textContent=` ${current} / ${a.pages}페이지 · 스크롤 보기`;}},{root:stage,threshold:[0,.25,.5,.75,1]});
   for(const section of pages.children){a.scrollObserver.observe(section);a.scrollPositionObserver.observe(section);}
