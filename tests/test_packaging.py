@@ -1,4 +1,6 @@
 from pathlib import Path
+import re
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +50,7 @@ def test_annotation_close_saves_before_dismissal():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v51" in script
+    assert "forest-shell-v52" in script
     for asset in ["/app.css?v=25", "/app.js?v=42", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert 'src="/app.js?v=42"' in html
@@ -62,7 +64,7 @@ def test_study_first_workspace_is_cached_and_keeps_management_in_drawer():
     html = (ROOT / "static/index.html").read_text()
     shell = (ROOT / "static/workspace.js").read_text()
     styles = (ROOT / "static/workspace.css").read_text()
-    assert '/workspace.js?v=4' in html
+    assert '/workspace.js?v=5' in html
     assert '/workspace.css?v=4' in html
     assert "studyDrawer" in shell
     assert "event.target===drawer" in shell
@@ -87,6 +89,20 @@ def test_study_materials_scroll_continuously_and_keep_page_specific_editing():
     assert "openAnnotator(doc.id,doc.pages,doc.name,page)" in shell
     assert "await toggleAnnotationScroll();root.querySelector('[data-anno-scroll]')" in app
     assert 'data-anno-edit="${index+1}"' in app
+
+
+def test_short_last_page_is_selected_when_scrolled_to_bottom():
+    shell = (ROOT / "static/workspace.js").read_text()
+    helper = re.search(r"function sourcePageAt\([^\n]+", shell)
+    assert helper
+    cases = """
+const assert=require('node:assert/strict');
+assert.equal(sourcePageAt(0,500,1550,[0,600,1200]),1);
+assert.equal(sourcePageAt(700,500,1550,[0,600,1200]),2);
+assert.equal(sourcePageAt(1050,500,1550,[0,600,1200]),3);
+assert.equal(sourcePageAt(0,500,400,[0]),1);
+"""
+    subprocess.run(["node", "-e", helper.group(0) + cases], check=True)
 
 
 def test_installed_pwa_has_branded_launch_animation():
