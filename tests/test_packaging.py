@@ -48,10 +48,10 @@ def test_annotation_close_saves_before_dismissal():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v49" in script
-    for asset in ["/app.css?v=25", "/app.js?v=40", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v50" in script
+    for asset in ["/app.css?v=25", "/app.js?v=41", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
-    assert 'src="/app.js?v=40"' in html
+    assert 'src="/app.js?v=41"' in html
     assert 'href="/app.css?v=25"' in html
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -301,3 +301,13 @@ def test_annotation_scroll_supports_direct_page_jump():
     assert "e.key==='Enter'&&e.target.id==='annoJump'" in app
     assert "data-anno-jump" in app
     assert ".annotation-page-jump input{width:64px;min-height:44px" in styles
+
+
+def test_annotation_reopens_at_last_viewed_page_without_server_changes():
+    app = (ROOT / "static/app.js").read_text()
+    assert "function annotationPageKey(did)" in app
+    assert "localStorage.getItem(annotationPageKey(did))" in app
+    assert "localStorage.setItem(`forest_annotation_page_${a.pid}_${a.cid}_${a.did}`" in app
+    assert "startPage==null?savedAnnotationPage(did):startPage" in app
+    assert "rememberAnnotationPage(a);drawAnnotations()" in app
+    assert "a.scrollPage=current;rememberAnnotationPage(a)" in app
