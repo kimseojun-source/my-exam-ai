@@ -48,10 +48,10 @@ def test_annotation_close_saves_before_dismissal():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v47" in script
-    for asset in ["/app.css?v=24", "/app.js?v=38", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v48" in script
+    for asset in ["/app.css?v=24", "/app.js?v=39", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
-    assert 'src="/app.js?v=38"' in html
+    assert 'src="/app.js?v=39"' in html
     assert 'href="/app.css?v=24"' in html
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
@@ -279,3 +279,13 @@ def test_annotation_dialog_supports_safe_keyboard_dismissal():
     assert "if(e.key!=='Tab')return" in app
     assert "e.currentTarget.querySelectorAll('button:not([disabled]),input:not([disabled])')" in app
     assert "if(a.opener?.isConnected)a.opener.focus({preventScroll:true})" in app
+
+
+def test_annotation_dialog_supports_keyboard_tool_shortcuts():
+    app = (ROOT / "static/app.js").read_text()
+    assert 'aria-keyshortcuts="P"' in app
+    assert 'aria-keyshortcuts="Control+S Meta+S"' in app
+    assert "const editing=e.target.matches?.('input,textarea,select')||e.target.isContentEditable" in app
+    assert "{p:'pen',h:'highlighter',e:'eraser',t:'text'}[key]" in app
+    assert "(e.ctrlKey||e.metaKey)&&key==='s'" in app
+    assert "!editing&&!ANNO.scrollMode" in app
