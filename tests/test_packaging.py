@@ -50,7 +50,7 @@ def test_annotation_close_saves_before_dismissal():
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v52" in script
+    assert "forest-shell-v53" in script
     for asset in ["/app.css?v=25", "/app.js?v=42", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
     assert 'src="/app.js?v=42"' in html
@@ -64,7 +64,7 @@ def test_study_first_workspace_is_cached_and_keeps_management_in_drawer():
     html = (ROOT / "static/index.html").read_text()
     shell = (ROOT / "static/workspace.js").read_text()
     styles = (ROOT / "static/workspace.css").read_text()
-    assert '/workspace.js?v=5' in html
+    assert '/workspace.js?v=6' in html
     assert '/workspace.css?v=4' in html
     assert "studyDrawer" in shell
     assert "event.target===drawer" in shell
@@ -103,6 +103,16 @@ assert.equal(sourcePageAt(1050,500,1550,[0,600,1200]),3);
 assert.equal(sourcePageAt(0,500,400,[0]),1);
 """
     subprocess.run(["node", "-e", helper.group(0) + cases], check=True)
+
+
+def test_restored_scroll_page_stays_anchored_while_images_expand():
+    shell = (ROOT / "static/workspace.js").read_text()
+    assert "restoreTarget=page;restoreActive=true" in shell
+    assert "if(restoreActive&&number<=restoreTarget)requestAnimationFrame(restorePagePosition)" in shell
+    assert "stage.addEventListener('pointerdown',releasePageRestore" in shell
+    assert "stage.addEventListener('wheel',releasePageRestore" in shell
+    assert "markSourcePage(current)" in shell
+    assert "setAttribute('aria-current','page')" in shell
 
 
 def test_installed_pwa_has_branded_launch_animation():
