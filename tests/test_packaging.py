@@ -47,13 +47,19 @@ def test_annotation_close_saves_before_dismissal():
     assert "addEventListener('beforeunload'" in script
 
 
+def test_annotation_close_label_matches_read_or_edit_mode():
+    script = (ROOT / "static/app.js").read_text()
+    assert "close.textContent='닫기'" in script
+    assert "close.textContent='저장 후 닫기'" in script
+
+
 def test_pwa_offline_cache_contains_only_public_shell():
     html = (ROOT / "static/index.html").read_text()
     script = (ROOT / "static/sw.js").read_text()
-    assert "forest-shell-v54" in script
-    for asset in ["/app.css?v=25", "/app.js?v=43", "/detail.js?v=6", "/install.js?v=1"]:
+    assert "forest-shell-v55" in script
+    for asset in ["/app.css?v=25", "/app.js?v=44", "/detail.js?v=6", "/install.js?v=1"]:
         assert asset in script
-    assert 'src="/app.js?v=43"' in html
+    assert 'src="/app.js?v=44"' in html
     assert 'href="/app.css?v=25"' in html
     assert "url.pathname.startsWith('/api/')" in script
     assert "cache.put('/',response.clone())" in script
