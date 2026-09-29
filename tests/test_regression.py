@@ -89,6 +89,50 @@ def test_analysis_and_tutor_receive_only_current_subject(monkeypatch):
  assert 'BIOLOGY_SENTINEL' not in observed[-1]
  assert c.get(f'/api/p/1/courses/{other}').json()['tutor_history']==[]
 
+def test_analysis_excludes_professor_contact_from_fallback_and_model_output():
+ contact='담당 교수 이메일: professor@example.edu 문의는 이 주소로 보내세요.'
+ concept='수요의 가격탄력성은 가격 변화율에 대한 수요량 변화율의 비율이다.'
+ chunks=[{'doc':'lecture.pdf','page':1,'text':contact+'\n'+concept}]
+ fallback=server.fallback_analysis('경제학',chunks)
+ assert any(concept in item['text'] for item in fallback['must_memorize'])
+ assert all('example.edu' not in item['text'] for key in ('must_memorize','must_understand','exam_hotspots') for item in fallback[key])
+ model={'must_memorize':[{'text':contact},{'text':concept}],
+        'exam_hotspots':[{'text':contact}],
+        'flashcards':[{'front':'교수 이메일은?','back':contact},{'front':'탄력성은?','back':concept}]}
+ cleaned=server.filter_analysis_admin_items(model)
+ assert cleaned['must_memorize']==[{'text':concept}]
+ assert cleaned['exam_hotspots']==[]
+ assert len(cleaned['flashcards'])==1
+
+def test_pencil_strokes_in_searchable_pdf_trigger_visual_reading(monkeypatch,tmp_path):
+ path=tmp_path/'lecture-with-ink.pdf'
+ document=fitz.open();page=document.new_page()
+ page.insert_text((72,72),'Selectable lecture text on supply and demand that remains readable.')
+ for index in range(14):
+  y=120+index*12
+  page.draw_line((72,y),(90,y+5),color=(0,0,0),width=2)
+ document.save(path);document.close()
+ assert server.has_pdf_ink(path)
+ monkeypatch.setattr(server,'client',lambda:object())
+ observed=[]
+ def read_ink(original,name):
+  observed.append(name)
+  return [{'page':1,'text':'손필기: 공급이 증가하면 가격이 하락한다.'}]
+ monkeypatch.setattr(server,'visual_pdf_notes',read_ink)
+ pages,_,_,mode,_=server.extract_document(path,path.name)
+ assert observed==[path.name]
+ assert mode=='text+vision'
+ assert 'Selectable lecture text' in pages[0]['text']
+ assert '손필기' in pages[0]['text']
+
+def test_large_handwritten_image_in_searchable_pdf_triggers_visual_reading(tmp_path):
+ path=tmp_path/'notes.pdf'
+ document=fitz.open();page=document.new_page()
+ page.insert_text((72,72),'Selectable lecture text on supply and demand that remains readable.')
+ page.insert_image(fitz.Rect(60,100,550,650),stream=image_bytes())
+ document.save(path);document.close()
+ assert server.has_pdf_ink(path)
+
 def test_image_reprocess_and_empty_analysis(monkeypatch):
  c=TestClient(server.app);cid=setup_course(c);base=f'/api/p/1/courses/{cid}'
  r=c.post(base+'/documents',files={'files':('photo.png',image_bytes(),'image/png')});did=r.json()['added'][0]['id']
